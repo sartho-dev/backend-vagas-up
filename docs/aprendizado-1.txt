@@ -1,0 +1,212 @@
+
+1. ONDE FICA CADA RESPONSABILIDADE
+----------------------------------
+
+Repositório não abre transação para orquestrar múltiplos agregados. Ele
+pode abrir uma transação DENTRO do seu próprio agregado (como o
+replaceActiveSession que faz delete + insert na tabela Session), mas
+quando a operação cruza entidades ou repositórios diferentes, a
+transação sobe pra camada de caso de uso/service.
+
+Você viu isso na prática:
+
+  - ERRADO: AuthService injetando Repository<Session> do TypeORM
+            -> vazamento de ORM.
+  - CERTO:  ISessionRepository.replaceActiveSession(...)
+            -> encapsula a regra, o service fica limpo.
+
+Princípio: repository = acesso a dados; service = orquestração;
+transação = fronteira do caso de uso.
+
+
+2. TIMING ATTACKS E O DUMMY HASH
+--------------------------------
+
+Você aprendeu que mensagem igual não basta — o tempo de resposta também
+vaza informação. Se "email não existe" responde em 1ms e "senha errada"
+em 100ms, o atacante descobre emails cadastrados medindo o relógio.
+
+Solução: comparar contra um dummyHash quando o email não existe,
+gastando o mesmo tempo do bcrypt.
+
+E aprendeu duas formas de implementar:
+
+  Versão 1 (com estado intermediário):
+
+    private dummyHash!: string;
+    private dummyHashReady: Promise<void>;
+
+  Versão 2 (melhor — o que você fez):
+
+    private dummyHash: Promise<string>;
+
+A segunda é superior: sem "!", sem risco de comparar contra vazio, o
+await resolve tanto no primeiro quanto no milésimo login.
+
+
+3. SÍNCRONO VS ASSÍNCRONO: EVENT LOOP, THREAD, BOOT
+--------------------------------------------------
+
+Você entendeu:
+
+  - bcrypt.hashSync BLOQUEIA a única thread do Node por ~100ms — trava
+    todo mundo.
+  - bcrypt.hash devolve uma Promise e libera a thread.
+  - Fazer hashSync no boot é aceitável, mas se o serviço for instanciado
+    várias vezes (testes, workers), o custo se repete.
+  - Solução: disparar bcrypt.hash assíncrono no construtor e await na
+    hora de usar.
+
+E o mais importante: quando o construtor roda depende de como você
+instancia:
+
+  Onde new AuthService está         | Quando construtor roda
+  ----------------------------------+--------------------------------
+  container.ts importado no topo    | No boot (por hoisting de import)
+  Dentro de handler                 | A cada request (antipadrão)
+  DI container lazy                 | Na primeira requisição
+
+
+4. COMPOSITION ROOT — O CONCEITO QUE VOCÊ APRENDEU FAZENDO
+----------------------------------------------------------
+
+Esse foi o coração da conversa. Você refatorou:
+
+  Antes                              | Depois
+  -----------------------------------+-------------------------------
+  export const authController = ...  | export function buildContainer()
+  routesMain como constante          | routesMain(container) função
+  new App()                          | new App(container)
+  Ordem de boot IMPLÍCITA (hoisting) | Ordem EXPLÍCITA no main.ts
+
+Aprendizados:
+
+  - Módulos não devem ter efeito colateral no import.
+    Devem exportar funções.
+  - O container é montado em um único lugar, depois do banco, antes
+    do App.
+  - Objetos são passados de mão em mão por parâmetro — nunca por
+    import global.
+  - Isso é injeção de dependência manual e é a base do que NestJS e
+    Spring fazem por baixo dos panos.
+
+
+5. O PROBLEMA DO getRepository ANTES DO initialize
+--------------------------------------------------
+
+Você descobriu por que o código antigo funcionava por sorte:
+
+  - AppDataSource.getRepository(Session) rodava no import, ANTES do
+    initialize().
+  - O TypeORM não valida na hora — só quebra na primeira query.
+  - Funciona enquanto ninguém consultar o banco antes do listen(). No
+    dia que alguém fizer isso, quebra com mensagem confusa.
+
+Duas saídas aprendidas:
+
+  1. Factory lazy: repositório recebe () => Repository<T> em vez da
+     instância.
+  2. Composition root (buildContainer): adia a construção toda pro
+     bootstrap(), depois do initialize().
+
+
+6. CONSTANTE VS FUNÇÃO — HOISTING E A CASCATA
+---------------------------------------------
+
+Você perguntou "posso deixar routesMain como constante?" e a resposta
+foi mais profunda do que parecia:
+
+  Constante não é o problema. Efeito colateral no import é o problema.
+
+Se routesMain é constante, TODA a cadeia precisa ser constante (rotas,
+controller, service, repository) — senão nada fecha. E se for tudo
+constante, o getRepository roda antes do banco. É uma cascata: a escolha
+de um arquivo obriga todos os outros.
+
+Solução: ou adia a construção das rotas (função em cascata) ou adia só
+o getRepository (factory no repositório).
+
+
+7. DEBUG REAL: INVALID SALT
+---------------------------
+
+Você viu na prática que:
+
+  - process.env.X sempre é string.
+  - bcrypt.hash(data, "12") interpreta "12" como SALT, não como rounds.
+  - Daí: "Invalid salt. Salt must be in the form of:
+    $Vers$log2(NumRounds)$saltvalue".
+  - Correção: Number(...) NA FRONTEIRA DO CONFIG, não espalhado pelo
+    código.
+  - Se você tem Number(config.x) em 5 lugares, é sinal de que o config
+    está exportando string. Conserta na fonte.
+
+
+8. DETALHES PEQUENOS QUE IMPORTAM
+---------------------------------
+
+  - manager.transaction(async (tm) => { ... return tm.save(x) }) — o
+    return interno devolve pro TypeORM, o externo devolve pro chamador.
+    Dois returns, duas funções diferentes.
+
+  - tm.create só instancia; tm.save persiste. Confundir os dois dá bug
+    silencioso.
+
+  - console.log com tokenHash é vazamento de dado sensível em log.
+
+  - Numeric separator 1_800_000 é açúcar visual — mesmo valor que
+    1800000.
+
+  - import type { Container } evita ciclos em runtime.
+
+
+9. O META-APRENDIZADO
+---------------------
+
+A coisa mais valiosa dessa conversa não foi nenhum bug específico. Foi
+ver que:
+
+  - Um erro pequeno pode revelar um problema estrutural. "Invalid salt"
+    era "12" vs 12, mas por trás estava "config exporta string e todo
+    mundo converte com Number()".
+
+  - Uma decisão local tem consequência em cascata. Mudar authRoutes pra
+    função obrigou routesMain, App e main.ts a mudarem juntos.
+
+  - A ordem de execução importa. Hoisting de import é uma armadilha
+    silenciosa, e a Solução 2 existe pra te dar controle explícito.
+
+  - TypeScript não pega tudo. router.use("/x", authRoutes) passou no
+    type-check e quebrou em runtime. Nem tudo é garantido pelo
+    compilador.
+
+
+RESUMO 
+-------------------
+
+Você aprendeu a CONTROLAR A ORDEM em que as coisas são construídas,
+separando responsabilidades (repository / service / container / App) e
+usando injeção explícita de dependência para eliminar o "funciona por
+sorte" do seu boot.
+
+E o mais legal: você fez isso NA PRÁTICA, com código real, não com
+exemplo de livro. Esse é o tipo de aprendizado que fica.
+
+
+PRÓXIMOS PASSOS (CANDIDATOS)
+----------------------------
+
+  1. Validação de env com Zod — fecha o tema do config, garante tipos
+     corretos na fronteira.
+
+  2. Shutdown gracioso (SIGTERM) — fechar servidor e pool do banco
+     corretamente.
+
+  3. Testes unitários do AuthService — usar o Container fake que a
+     gente comentou.
+
+  4. Migrations — você tem synchronize: false, precisa de um fluxo de
+     migration funcional.
+
+  5. revokeAllSessions plugado no StudentService — quando desativar
+     aluno, revogar sessões automaticamente.

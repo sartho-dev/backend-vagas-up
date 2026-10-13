@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only ./src/main.ts",
     "build": "tsc",
+    "seed:admin": "ts-node src/shared/database/seeds/create-first-admin.ts",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate src/shared/database/migrations/Init -d src/shared/database/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/shared/database/data-source.ts",

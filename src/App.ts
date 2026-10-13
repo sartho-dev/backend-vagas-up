@@ -3,7 +3,7 @@ import { Server } from "http";
 import helmet from "helmet";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";
-import { config } from "./shared/config";
+  import { config } from "./shared/config";
 import routesMain from "./routes";
 import { errorHandler } from "./shared/middleware/errorHandler";
 import swaggerSpec from "./shared/docs/swagger";

@@ -8,13 +8,18 @@ import {
   StudentProfileResult,
 } from "./TypesStudentsService";
 import { toProfileResult } from "./toProfileResult";
+import { EmailRegistry } from "../../../shared/services/EmailRegistry";
+import { AccountRole } from "../../auth/types/AccountRole";
 
 // RNF01: bcrypt with cost 12 minimum
 const BCRYPT_COST = 12;
 
 export class StudentService {
   // Depends on the interface, not on the TypeORM implementation.
-  constructor(private repository: IStudentRepository) {}
+  constructor(
+    private repository: IStudentRepository,
+    private emails: EmailRegistry,
+  ) {}
 
   private async hashPassword(password: string): Promise<string> {
     return bcrypt.hash(password, BCRYPT_COST);
@@ -68,7 +73,10 @@ export class StudentService {
     // simultaneous-request case.
     if (
       data.email !== undefined &&
-      (await this.repository.isEmailTakenByOther(data.email, studentId))
+      (await this.emails.isTakenByOther(data.email, {
+        role: AccountRole.STUDENT,
+        id: studentId,
+      }))
     ) {
       throw new AppError("Email already in use", 409);
     }

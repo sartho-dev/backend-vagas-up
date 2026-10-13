@@ -36,10 +36,6 @@ export class AuthService {
       randomBytes(16).toString("hex"),
       config.bcryptCost,
     );
-    console.log(
-      "[AuthService] constructor rodou em: ",
-      new Date().toISOString(),
-    );
   }
 
   // RF01
@@ -67,6 +63,7 @@ export class AuthService {
     const passwordMatches = await bcrypt.compare(input.password, hashToCompare);
 
     // Same message for unknown email, wrong password and inactive account.
+
     if (!found || !passwordMatches) {
       throw new AppError(INVALID_CREDENTIALS, 401);
     }
@@ -94,10 +91,7 @@ export class AuthService {
   // protected request.
   async authenticate(token: string): Promise<AuthContext> {
     const now = this.now();
-    console.log("\n this.now()>", now);
     const session = await this.sessions.findByTokenHash(hashToken(token));
-
-    console.log("\n sessão>", session);
 
     if (!session || session.revokedAt) {
       throw new AppError(INVALID_SESSION, 401);
