@@ -21,6 +21,12 @@ Cada task segue o mesmo modelo: contexto, entregas, regras, critérios de aceita
 | Formação | `formations` (a criar) |
 | Sessão | tabela `sessions` |
 
+**Divergência deliberada do modelo da v4.9 (decidida em 14/10/2026):** o projeto **mantém** `student_phones` e as quatro tabelas de perfil profissional (`student_languages`, `student_skills`, `student_certifications`, `student_experiences`), que a seção 6 do SRS não prevê.
+
+O modelo da v4.9 é um **subconjunto** do que já existe: ele guarda um telefone só e resume o perfil profissional a `resumo`, `foto_url` e `link_curriculo`. Manter as tabelas não viola regra nenhuma — nenhuma RN depende de haver um único telefone — e preserva trabalho já feito e testado. Onde isso ajuda: a RN-C11 (marca de WhatsApp) fica **por telefone** em vez de por pessoa, que é mais correto, e a busca do banco de talentos (RF27) ganha habilidades e idiomas como critério.
+
+O custo a não esquecer: a anonimização da RN-L2 (task 23) precisa limpar **todas** essas tabelas, não só a linha do candidato.
+
 Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a coluna da direita.
 
 ---
@@ -165,11 +171,13 @@ O módulo `student` foi escrito para a v3.2 e carrega campos que a v4.9 não tem
 **Campos que entram** (RF10, RF12):
 - `cidade` (texto; o atendimento inicial é Campo Grande, mas o campo já existe para expansão).
 - `escolaridade` — enum fixo da RN-C2: fundamental incompleto, fundamental completo, médio em andamento, médio completo, técnico em andamento, técnico completo, superior em andamento, superior completo, pós-graduação.
-- `telefone` como **coluna** (opcional) e `telefone_whatsapp` booleano (RN-C11). Hoje é tabela `student_phones`, que sai.
+- `is_whatsapp` booleano **na tabela `student_phones`** (RN-C11). A tabela é mantida (ver "Divergência deliberada"), então a marca fica por telefone, e não por pessoa como no SRS. O cadastro continua aceitando o telefone como opcional (RF10).
 - `visibilidade` — enum da RN-C9: `oculto` (padrão), `so_verificados`, `publico`.
 - `resumo`, `foto_url`, `link_curriculo` (RN-C10).
 
-**Campos e tabelas que saem**: `student_languages`, `student_skills`, `student_certifications`, `student_experiences`. A v4.9 não as tem; o perfil profissional é só resumo, foto e link. Confirmar com o autor antes de dropar.
+**Tabelas mantidas**: `student_phones`, `student_languages`, `student_skills`, `student_certifications` e `student_experiences` continuam como estão — decisão do projeto. Os campos `resumo`, `foto_url` e `link_curriculo` **somam-se** a elas, não as substituem.
+
+**Nada é dropado nesta task.**
 
 ## Regras
 - **RN-C1 (D2):** idade mínima no cadastro, calculada no fuso America/Campo_Grande. Constante em um ponto só.
@@ -456,6 +464,7 @@ Entra o terceiro perfil. **A decisão D1 precisa estar tomada antes desta task**
 
 ## Entregas (RF27)
 - Busca de candidatos por escolaridade, curso, cidade e palavra-chave — **só anunciante verificado** (RN-V5).
+- Como as tabelas de perfil profissional foram mantidas, **habilidades e idiomas entram como filtro** além do que o RF27 pede. Ganho direto da divergência decidida.
 - Ver perfil e enviar mensagem de interesse, que gera notificação e e-mail ao candidato.
 - Tabela `contacts`: `anunciante_id`, `candidato_id`, `enviado_por` FK, `mensagem`, `criado_em`.
 
@@ -547,7 +556,8 @@ Entra o terceiro perfil. **A decisão D1 precisa estar tomada antes desta task**
 
 ## Entregas (RF18, RN-L)
 - Exclusão pela própria tela, confirmando com a senha. **Efeito imediato, sem fila.**
-- **RN-L2:** anonimizar, não apagar — nome vira "Usuário removido", e-mail vira valor aleatório; CPF, telefone, data de nascimento, foto, resumo, link e formações são apagados; sessões e tokens apagados; `ativo = false`. Isso exige que `cpf` e `data_nasc` sejam **anuláveis**.
+- **RN-L2:** anonimizar, não apagar — nome vira "Usuário removido", e-mail vira valor aleatório; CPF, data de nascimento, foto, resumo e link são apagados; sessões e tokens apagados; `ativo = false`. Isso exige que `cpf` e `data_nasc` sejam **anuláveis**.
+- **Por causa das tabelas mantidas** (ver "Divergência deliberada"), a anonimização apaga as linhas de `student_phones`, `student_languages`, `student_skills`, `student_certifications`, `student_experiences` e `formations`. Como são dados pessoais do titular e não têm valor histórico para o anunciante, é `DELETE` mesmo, não anonimização. Uma linha esquecida aqui é vazamento de dado pessoal depois da exclusão.
 - **RN-L3:** candidaturas em andamento canceladas; as finalizadas permanecem anonimizadas no histórico do anunciante. Contatos, notificações e denúncias ficam sem identificação.
 - **RN-L4:** anunciante PF que exclui a conta tem as vagas abertas encerradas e os dados pessoais anonimizados; PJ anonimiza só os dados do responsável.
 
