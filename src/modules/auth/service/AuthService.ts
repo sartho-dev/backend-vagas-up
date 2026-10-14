@@ -1,4 +1,3 @@
-import bcrypt from "bcrypt";
 import { createHash, randomBytes } from "node:crypto";
 import { AppError } from "../../../shared/errors/AppError";
 import { IAuthAccountProvider } from "../interfaces/IAuthAccountProvider";
