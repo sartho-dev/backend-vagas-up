@@ -1,14 +1,14 @@
 import { StudentService } from "../service/StudentService";
 import { Response, Request } from "express";
 import { createStudentSchema } from "../validators/CreateStudentValidator";
-import {
-  ApiResponse,
-  CreateStudentResponse,
-} from "../../../shared/types/ApiResponse";
+import { ApiResponse } from "../../../shared/types/ApiResponse";
 import { asyncHandler } from "../../../shared/middleware/asyncHandler";
 import { updateStudentSchema } from "../validators/UpdateStudentValidator";
 import { getAuth } from "../../auth/types/AccountRole";
-import { StudentProfileResult } from "../service/TypesStudentsService";
+import {
+  StudentCreatedResult,
+  StudentProfileResult,
+} from "../types/typesStudents";
 
 export class StudentController {
   constructor(private studentService: StudentService) {}
@@ -17,7 +17,7 @@ export class StudentController {
     const data = createStudentSchema.parse(req.body);
     const student = await this.studentService.createService(data);
 
-    const response: ApiResponse<CreateStudentResponse> = {
+    const response: ApiResponse<StudentCreatedResult> = {
       status: "success",
       data: student,
     };

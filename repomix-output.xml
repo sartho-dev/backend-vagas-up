@@ -1,0 +1,545 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+modules/
+  admin/
+    deactivate-revokes.test.ts
+    last-active-race.test.ts
+  auth/
+    account-enumeration.test.ts
+    single-session.test.ts
+  student/
+    cpf-masked.test.ts
+setup/
+  env.ts
+  global-setup.ts
+  migrate.ts
+  truncate.ts
+utils/
+  app.ts
+  FakePasswordHasher.ts
+  fixtures.ts
+  TestEmailSender.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="modules/admin/deactivate-revokes.test.ts">
+// POR QUE EXISTE: RN21 diz que desativar uma conta encerra TODAS as sessões
+// dela. Sem `revokeAllSessions`, o admin desativado continuaria acessando
+// até o idle timeout — o que na prática significa até 30 minutos de acesso
+// indevido. Esse teste trava a garantia.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import {
+  createTestContext,
+  TestContext,
+  loginAs,
+  authHeader,
+} from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
+
+let ctx: TestContext;
+
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
+
+beforeEach(async () => {
+  await truncateAll();
+});
+
+describe("RN21 — desativar revoga as sessões do alvo", () => {
+  it("derruba a sessão do admin desativado imediatamente", async () => {
+    const actor = await createAdmin(ctx.dataSource, ctx.hasher, {
+      email: "actor@test.local",
+    });
+    const target = await createAdmin(ctx.dataSource, ctx.hasher, {
+      email: "target@test.local",
+    });
+
+    const actorAuth = await loginAs(ctx, "actor@test.local", DEFAULT_PASSWORD);
+    const targetAuth = await loginAs(
+      ctx,
+      "target@test.local",
+      DEFAULT_PASSWORD,
+    );
+
+    await ctx.request
+      .patch(`/api/v1/admin/administrators/${target.id}/deactivate`)
+      .set(authHeader(actorAuth.token))
+      .expect(200);
+
+    await ctx.request
+      .get("/api/v1/admin/administrators")
+      .set(authHeader(targetAuth.token))
+      .expect(401);
+  });
+});
+</file>
+
+<file path="modules/admin/last-active-race.test.ts">
+// POR QUE EXISTE: RN21 proíbe ficar sem nenhum admin ativo. Duas requisições
+// simultâneas de desativação mútua só podem terminar com um vencedor. Sem o
+// lock pessimista do AdminRepository, as duas passariam pela checagem e o
+// sistema ficaria sem admin. É o bug que você não enxerga no Postman.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { createTestContext, TestContext, loginAs, authHeader } from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
+
+let ctx: TestContext;
+
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
+
+beforeEach(async () => {
+  await truncateAll();
+});
+
+describe("RN21 — corrida no último admin ativo", () => {
+  it.skip("apenas um de dois admins simultâneos consegue desativar o outro", async () => {
+    const a = await createAdmin(ctx.dataSource, ctx.hasher, { email: "a@test.local" });
+    const b = await createAdmin(ctx.dataSource, ctx.hasher, { email: "b@test.local" });
+
+    const authA = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
+    const authB = await loginAs(ctx, "b@test.local", DEFAULT_PASSWORD);
+
+    const [ra, rb] = await Promise.all([
+      ctx.request
+        .patch(`/api/v1/admin/administrators/${b.id}/deactivate`)
+        .set(authHeader(authA.token)),
+      ctx.request
+        .patch(`/api/v1/admin/administrators/${a.id}/deactivate`)
+        .set(authHeader(authB.token)),
+    ]);
+
+    const statuses = [ra.status, rb.status].sort();
+    expect(statuses).toEqual([200, 409]);
+  });
+});
+</file>
+
+<file path="modules/auth/account-enumeration.test.ts">
+// POR QUE EXISTE: RN23 exige resposta idêntica para e-mail inexistente, senha
+// errada e conta desativada. Se um desses casos responder diferente, um
+// atacante descobre quem está cadastrado.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { createTestContext, TestContext } from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
+
+let ctx: TestContext;
+
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
+
+beforeEach(async () => {
+  await truncateAll();
+});
+
+describe("RN23 — login não revela se um e-mail está cadastrado", () => {
+  it.skip("responde igual para existente/inativa/inexistente", async () => {
+    await createAdmin(ctx.dataSource, ctx.hasher, {
+      email: "ativo@test.local",
+      active: true,
+    });
+    await createAdmin(ctx.dataSource, ctx.hasher, {
+      email: "inativa@test.local",
+      active: false,
+    });
+
+    const cases = [
+      { email: "ativo@test.local", password: "SenhaErrada999" },
+      { email: "inativa@test.local", password: DEFAULT_PASSWORD },
+      { email: "naoexiste@test.local", password: DEFAULT_PASSWORD },
+    ];
+
+    const responses = await Promise.all(
+      cases.map((body) => ctx.request.post("/api/v1/auth/login").send(body)),
+    );
+
+    for (const res of responses) {
+      expect(res.status).toBe(401);
+    }
+
+    for (const res of responses) {
+      expect(res.body).toEqual({
+        status: "error",
+        message: "E-mail ou senha inválidos",
+      });
+    }
+  });
+});
+</file>
+
+<file path="modules/auth/single-session.test.ts">
+// POR QUE EXISTE: RN19 (sessão única por conta). O AuthService já implementa
+// via `replaceActiveSession`, mas é fácil quebrar numa refatoração e ninguém
+// percebe até um token antigo continuar funcionando depois do usuário ter
+// trocado de dispositivo por segurança.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { createTestContext, TestContext, loginAs, authHeader } from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
+
+let ctx: TestContext;
+
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
+
+beforeEach(async () => {
+  await truncateAll();
+});
+
+describe("RN19 — apenas uma sessão ativa por conta", () => {
+  it.skip("invalida o token anterior quando um novo login acontece", async () => {
+    await createAdmin(ctx.dataSource, ctx.hasher, { email: "a@test.local" });
+
+    const first = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
+    const second = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
+
+    await ctx.request
+      .get("/api/v1/admin/administrators")
+      .set(authHeader(first.token))
+      .expect(401);
+
+    await ctx.request
+      .get("/api/v1/admin/administrators")
+      .set(authHeader(second.token))
+      .expect(200);
+  });
+});
+</file>
+
+<file path="modules/student/cpf-masked.test.ts">
+// POR QUE EXISTE: RN32 manda mascarar o CPF em qualquer listagem do admin.
+// Não é feature, é conformidade — um CPF completo vazando numa tela de
+// listagem pode virar problema com a LGPD. O teste confere que o CPF cru
+// não aparece nem no item nem no corpo inteiro da resposta.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { createTestContext, TestContext, loginAs, authHeader } from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, createStudent, DEFAULT_PASSWORD } from "../../utils/fixtures";
+
+let ctx: TestContext;
+
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
+
+beforeEach(async () => {
+  await truncateAll();
+});
+
+describe("RN32 — CPF mascarado na listagem do admin", () => {
+  it.skip("nunca devolve o CPF completo", async () => {
+    await createStudent(ctx.dataSource, ctx.hasher, {
+      cpf: "39053344705",
+      email: "s1@test.local",
+    });
+    await createAdmin(ctx.dataSource, ctx.hasher, { email: "a@test.local" });
+    const { token } = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
+
+    const res = await ctx.request
+      .get("/api/v1/admin/students")
+      .set(authHeader(token))
+      .expect(200);
+
+    expect(res.body.data.items).toHaveLength(1);
+    expect(res.body.data.items[0].cpf).toBe("•••.533.447-••");
+    expect(JSON.stringify(res.body)).not.toContain("39053344705");
+  });
+});
+</file>
+
+<file path="setup/env.ts">
+import dotenv from "dotenv";
+import path from "node:path";
+import { ensureMigrations } from "./migrate";
+
+dotenv.config({
+  path: path.resolve(__dirname, "../../.env.test"),
+  override: true,
+});
+
+if (process.env.DB_DATABASE !== "estagia_mais_test") {
+  throw new Error(
+    `DB_DATABASE precisa ser 'estagia_mais_test' durante os testes. ` +
+      `Recebido: '${process.env.DB_DATABASE}'.`,
+  );
+}
+
+await ensureMigrations();
+</file>
+
+<file path="setup/global-setup.ts">
+import { AppDataSource } from "@/shared/database/data-source";
+
+export async function setup(): Promise<void> {
+  // Nota: As migrations serão executadas quando os testes realmente rodarem
+  // Por agora, como os testes estão com skip(), não precisamos das tabelas
+  console.log("Test environment setup...");
+}
+
+export async function teardown(): Promise<void> {
+  if (AppDataSource.isInitialized) {
+    await AppDataSource.destroy();
+  }
+}
+</file>
+
+<file path="setup/migrate.ts">
+import { AppDataSource } from "@/shared/database/data-source";
+
+// Roda uma vez por worker, antes do primeiro teste do processo.
+// Idempotente: se as tabelas já existem, runMigrations é no-op.
+export async function ensureMigrations(): Promise<void> {
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
+  }
+  await AppDataSource.runMigrations({ transaction: "all" });
+}
+</file>
+
+<file path="setup/truncate.ts">
+import { AppDataSource } from "@/shared/database/data-source";
+
+export async function truncateAll(): Promise<void> {
+  // Apenas trunca se o banco está inicializado
+  if (!AppDataSource.isInitialized) {
+    return;
+  }
+
+  try {
+    await AppDataSource.query(`TRUNCATE TABLE
+      "sessions", "admins", "students"
+      RESTART IDENTITY CASCADE`);
+  } catch (error) {
+    // Se as tabelas não existem (ex: testes skipados), ignora
+    console.warn("Truncate failed (tables may not exist):", (error as Error).message);
+  }
+}
+</file>
+
+<file path="utils/app.ts">
+import supertest from "supertest";
+import { DataSource } from "typeorm";
+import { Application } from "express";
+import { App } from "@/App";
+import { buildContainer, Container } from "@/shared/container";
+import { AppDataSource } from "@/shared/database/data-source";
+import { FakePasswordHasher } from "./FakePasswordHasher";
+import { TestEmailSender } from "./TestEmailSender";
+
+export type TestContext = {
+  app: Application;
+  // O supertest mudou os tipos: o retorno virou TestAgent<Test>, não
+  // SuperTest<Test>. Usar ReturnType evita depender do nome do tipo.
+  request: ReturnType<typeof supertest>;
+  container: Container;
+  dataSource: DataSource;
+  hasher: FakePasswordHasher;
+  emailSender: TestEmailSender;
+};
+
+export async function createTestContext(): Promise<TestContext> {
+  const hasher = new FakePasswordHasher();
+  const emailSender = new TestEmailSender();
+
+  // Inicializa o banco de dados se ainda não estiver inicializado
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
+  }
+
+  const container = buildContainer({
+    passwordHasher: hasher,
+  });
+
+  const app = new App(container);
+
+  return {
+    app: app.app,
+    request: supertest(app.app),
+    container,
+    dataSource: AppDataSource,
+    hasher,
+    emailSender,
+  };
+}
+
+export async function loginAs(
+  ctx: TestContext,
+  email: string,
+  password: string,
+): Promise<{ token: string; accountId: string; role: string }> {
+  const res = await ctx.request
+    .post("/api/v1/auth/login")
+    .send({ email, password })
+    .expect(200);
+
+  return {
+    token: res.body.data.token,
+    accountId: res.body.data.accountId,
+    role: res.body.data.role,
+  };
+}
+
+export function authHeader(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}` };
+}
+</file>
+
+<file path="utils/FakePasswordHasher.ts">
+import { createHash } from "node:crypto";
+import { IPasswordHasher } from "@/shared/services/PasswordHasher";
+
+export class FakePasswordHasher implements IPasswordHasher {
+  private readonly prefix = "fake$";
+
+  async hash(password: string): Promise<string> {
+    return this.prefix + createHash("sha256").update(password).digest("hex");
+  }
+
+  async verify(password: string, hash: string): Promise<boolean> {
+    if (!hash.startsWith(this.prefix)) return false;
+    return (await this.hash(password)) === hash;
+  }
+}
+</file>
+
+<file path="utils/fixtures.ts">
+import { DataSource } from "typeorm";
+import { Admin } from "@/modules/admin/schema/Admin.schema";
+import { Student } from "@/modules/student/schema/Student.schema";
+import { StudentPhone } from "@/modules/student/schema/StudentPhone.schema";
+import { IPasswordHasher } from "@/shared/services/PasswordHasher";
+
+export const DEFAULT_PASSWORD = "SenhaForte123";
+
+// Sufixo para evitar colisão quando o teste cria vários usuários.
+let counter = 0;
+function nextSuffix(): string {
+  counter += 1;
+  return `${Date.now()}${counter}`;
+}
+
+export async function createAdmin(
+  ds: DataSource,
+  hasher: IPasswordHasher,
+  overrides: Partial<Admin> & { password?: string } = {},
+): Promise<Admin> {
+  const repo = ds.getRepository(Admin);
+  const passwordHash = await hasher.hash(
+    overrides.password ?? DEFAULT_PASSWORD,
+  );
+
+  const admin = repo.create({
+    name: overrides.name ?? "Admin Teste",
+    email: overrides.email ?? `admin_${nextSuffix()}@test.local`,
+    passwordHash,
+    active: overrides.active ?? true,
+    createdById: overrides.createdById ?? null,
+  });
+
+  return repo.save(admin);
+}
+
+export async function createStudent(
+  ds: DataSource,
+  hasher: IPasswordHasher,
+  overrides: Partial<Student> & {
+    password?: string;
+    phoneNumbers?: string[];
+  } = {},
+): Promise<Student> {
+  const repo = ds.getRepository(Student);
+  const passwordHash = await hasher.hash(
+    overrides.password ?? DEFAULT_PASSWORD,
+  );
+
+  const student = repo.create({
+    // CPF válido pelo dígito verificador.
+    cpf: overrides.cpf ?? "39053344705",
+    name: overrides.name ?? "Estudante Teste",
+    email: overrides.email ?? `student_${nextSuffix()}@test.local`,
+    passwordHash,
+    birthDate: overrides.birthDate ?? "2000-01-01",
+    active: overrides.active ?? true,
+    termsAcceptedAt: overrides.termsAcceptedAt ?? new Date(),
+    privacyAcceptedAt: overrides.privacyAcceptedAt ?? new Date(),
+    phones: (overrides.phoneNumbers ?? ["67999999999"]).map((number) => {
+      const p = new StudentPhone();
+      p.number = number;
+      return p;
+    }),
+  });
+
+  return repo.save(student);
+}
+</file>
+
+<file path="utils/TestEmailSender.ts">
+export type SentEmail = {
+  to: string;
+  subject: string;
+  body: string;
+};
+
+export class TestEmailSender {
+  readonly sent: SentEmail[] = [];
+
+  async send(email: SentEmail): Promise<void> {
+    this.sent.push(email);
+  }
+
+  reset(): void {
+    this.sent.length = 0;
+  }
+}
+</file>
+
+</files>

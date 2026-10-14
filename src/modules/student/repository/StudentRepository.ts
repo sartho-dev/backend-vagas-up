@@ -63,6 +63,22 @@ export class StudentRepository implements IStudentRepository {
     }
   }
 
+  // RF20 / RN32: paginated listing for the administrator.
+  async list(params: {
+    page: number;
+    pageSize: number;
+    active?: boolean;
+  }): Promise<{ items: Student[]; total: number }> {
+    const [items, total] = await this.repository.findAndCount({
+      where: params.active === undefined ? {} : { active: params.active },
+      order: { createdAt: "DESC" },
+      skip: (params.page - 1) * params.pageSize,
+      take: params.pageSize,
+    });
+
+    return { items, total };
+  }
+
   async findById(id: string): Promise<Student | null> {
     return await this.repository.findOne({
       where: { id, active: true },

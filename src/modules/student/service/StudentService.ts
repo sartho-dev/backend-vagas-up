@@ -1,4 +1,3 @@
-import bcrypt from "bcrypt";
 import { AppError } from "../../../shared/errors/AppError";
 import { IStudentRepository } from "../interfaces/IStudentRepository";
 import { CreateStudentInput } from "../validators/CreateStudentValidator";
@@ -6,29 +5,26 @@ import { UpdateStudentInput } from "../validators/UpdateStudentValidator";
 import {
   StudentCreatedResult,
   StudentProfileResult,
-} from "./TypesStudentsService";
+} from "../types/typesStudents";
 import { toProfileResult } from "./toProfileResult";
 import { EmailRegistry } from "../../../shared/services/EmailRegistry";
 import { AccountRole } from "../../auth/types/AccountRole";
+import { IPasswordHasher } from "../../../shared/services/PasswordHasher";
 
 // RNF01: bcrypt with cost 12 minimum
-const BCRYPT_COST = 12;
 
 export class StudentService {
   // Depends on the interface, not on the TypeORM implementation.
   constructor(
     private repository: IStudentRepository,
     private emails: EmailRegistry,
+    private hasher: IPasswordHasher,
   ) {}
-
-  private async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, BCRYPT_COST);
-  }
 
   async createService(data: CreateStudentInput): Promise<StudentCreatedResult> {
     // RN06: friendly early answer. The database unique constraint (translated
     // to a 409 in the repository) covers the simultaneous-request case.
-    if (await this.repository.existsByEmail(data.email)) {
+    if (await this.emails.isTaken(data.email)) {
       throw new AppError("Email already in use", 409);
     }
 
@@ -36,7 +32,7 @@ export class StudentService {
       throw new AppError("CPF already in use", 409);
     }
 
-    const passwordHash = await this.hashPassword(data.password);
+    const passwordHash = await this.hasher.hash(data.password);
 
     // RF03 / RNF03: the consent moment is recorded by the server, never taken
     // from the client. The validator already guarantees both flags are true.

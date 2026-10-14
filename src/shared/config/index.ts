@@ -1,40 +1,35 @@
 import dotenv from "dotenv";
 
-dotenv.config();
-
-// Validation of required environment variables
-const requiredEnvVars = ["JWT_SECRET"] as const;
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    throw new Error(`Missing required environment variable: ${envVar}`);
-  }
-}
+dotenv.config({
+  path: process.env.NODE_ENV === "test" ? ".env.test" : ".env",
+});
 
 export const config = {
   mode: process.env.NODE_ENV || "development",
-  jwtSecret: process.env.JWT_SECRET!, // now guaranteed to exist
   port: Number(process.env.PORT) || 3000,
   host: "0.0.0.0",
-  refreshTokenCleanupIntervalMinutes: Number(
-    process.env.REFRESH_TOKEN_CLEANUP_INTERVAL_MINUTES || 60,
-  ),
-  sentryDsn: process.env.SENTRY_DSN || "",
 
-  // Intervalo (minutos) entre varreduras do job que finaliza distratos cuja
-  // janela de aviso prévio de 4 meses já decorreu (Task 25).
+  // RN28: todas as datas de negócio (prazos de vaga, matrícula, consentimento)
+  // são interpretadas nesse fuso e gravadas em UTC (`timestamptz`).
+  timezone: process.env.APP_TIMEZONE || "America/Campo_Grande",
 
+  // RNF01: piso de 12 aplicado pelo PasswordHasher (não confie só no env).
   bcryptCost: Number(process.env.BCRYPT_COST ?? 12),
+
+  // Sessão (RNF02).
   sessionIdleMs: Number(process.env.SESSION_IDLE_MS ?? 1_800_000),
   sessionMaxAgeMs: Number(process.env.SESSION_MAX_AGE_MS ?? 7_200_000),
   touchThrottleMs: Number(process.env.TOUCH_THROTTLE_MS ?? 60_000),
+
+  // Task 05: monta os links dos e-mails (reset, convite, confirmação).
+  appBaseUrl: process.env.APP_BASE_URL || "http://localhost:5173",
 
   db: {
     host: process.env.DB_HOST || "localhost",
     port: Number(process.env.DB_PORT) || 5432,
     username: process.env.DB_USERNAME || "postgres",
     password: process.env.DB_PASSWORD || "postgres",
-    database: process.env.DB_DATABASE || "cybercastle_dev",
-    storage: process.env.DB_STORAGE || "./database.sqlite",
+    database: process.env.DB_DATABASE || "estagia_cg_dev",
   },
 
   mail: {
@@ -44,4 +39,6 @@ export const config = {
     pass: process.env.SMTP_PASS || "",
     from: process.env.EMAIL_FROM || "",
   },
+
+  sentryDsn: process.env.SENTRY_DSN || "",
 };

@@ -3,10 +3,3 @@ export type ApiResponse<T = any> = {
   data?: T;
   message?: string;
 };
-
-export type CreateStudentResponse = {
-  id: string;
-  email: string;
-  name: string;
-  birthDate: string;
-};

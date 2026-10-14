@@ -12,7 +12,30 @@ export function adminRoutes(container: Container): Router {
   //   student / responsible -> 403
   router.use(container.authenticate, authorize(AccountRole.ADMIN));
 
-  // Subtask 2 onwards: admin management, student accounts, CPF correction.
+  const admins = container.adminController;
+
+  // RF21: manage administrators
+  router.post("/administrators", admins.createController.bind(admins));
+  router.get("/administrators", admins.listController.bind(admins));
+
+  // RF22: own profile. Declared before the /:id routes on purpose.
+  router.patch(
+    "/administrators/me",
+    admins.updateOwnProfileController.bind(admins),
+  );
+
+  // RF20 / RN32: student accounts seen by the administrator
+  router.get("/students", admins.listStudentsController.bind(admins));
+
+  router.patch(
+    "/administrators/:id/deactivate",
+    admins.deactivateController.bind(admins),
+  );
+  router.patch(
+    "/administrators/:id/reactivate",
+    admins.reactivateController.bind(admins),
+  );
 
   return router;
+  // Subtask 2 onwards: admin management, student accounts, CPF correction.
 }

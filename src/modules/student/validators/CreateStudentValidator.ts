@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { passwordSchema } from "../../../shared/validators/passwordSchema";
+import {
+  hasMinimumAge,
+  MIN_AGE_YEARS,
+} from "../../../shared/services/CalculatorBirthDate";
+import { config } from "../../../shared/config";
 
 // ============================================================================
 // Reusable primitive schemas (Create + Update)
@@ -49,16 +55,6 @@ export const nameSchema = z
 // RNF01: minimum strength here; the hash (bcrypt cost 12) happens in the service.
 // bcrypt only reads the first 72 BYTES (not characters), so the limit is
 // measured in bytes — accents and emojis take more than one byte each.
-export const passwordSchema = z
-  .string()
-  .min(8, "Password must have at least 8 characters")
-  .refine(
-    (value) => Buffer.byteLength(value, "utf8") <= 72,
-    "Password is too long (bcrypt limit is 72 bytes)",
-  )
-  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-  .regex(/[0-9]/, "Password must contain at least one number");
 
 // True only for real calendar dates ("2024-02-31" is rejected).
 export function isValidCalendarDate(value: string): boolean {
@@ -74,10 +70,14 @@ export const calendarDateSchema = (field: string) =>
     .regex(/^\d{4}-\d{2}-\d{2}$/, `${field} must be in YYYY-MM-DD format`)
     .refine(isValidCalendarDate, `${field} is not a valid calendar date`);
 
-export const birthDateSchema = calendarDateSchema("birthDate").refine(
-  (value) => new Date(`${value}T00:00:00Z`).getTime() <= Date.now(),
-  { message: "birthDate cannot be in the future" },
-);
+export const birthDateSchema = calendarDateSchema("birthDate")
+  .refine((value) => new Date(`${value}T00:00:00Z`).getTime() <= Date.now(), {
+    message: "birthDate cannot be in the future",
+  })
+  .refine(
+    (value) => hasMinimumAge(value, MIN_AGE_YEARS, new Date(), config.timezone),
+    { message: `Student must be at least ${MIN_AGE_YEARS} years old` },
+  );
 
 // RF03: at least 1 phone number (multivalued attribute)
 export const phoneSchema = z

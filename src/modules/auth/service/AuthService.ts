@@ -6,6 +6,7 @@ import { ISessionRepository } from "../interfaces/ISessionRepository";
 import { AccountRole, AuthContext } from "../types/AccountRole";
 import { LoginInput } from "../validators/LoginValidator";
 import { config } from "../../../shared/config";
+import { IPasswordHasher } from "../../../shared/services/PasswordHasher";
 
 export type LoginResult = {
   token: string;
@@ -14,7 +15,9 @@ export type LoginResult = {
   idleTimeoutMinutes: number;
 };
 
-const INVALID_CREDENTIALS = "Invalid email or password";
+// RN23: mensagem unica para e-mail inexistente, senha errada e conta
+// inativa. Qualquer variacao aqui vira um oraculo de enumeracao de contas.
+const INVALID_CREDENTIALS = "E-mail ou senha inválidos";
 const INVALID_SESSION = "Invalid or expired session";
 
 function hashToken(token: string): string {
@@ -29,13 +32,11 @@ export class AuthService {
   constructor(
     private providers: IAuthAccountProvider[],
     private sessions: ISessionRepository,
+    private hasher: IPasswordHasher,
     private now: () => Date = () => new Date(),
   ) {
     this.providersByRole = new Map(providers.map((p) => [p.role, p]));
-    this.dummyHash = bcrypt.hash(
-      randomBytes(16).toString("hex"),
-      config.bcryptCost,
-    );
+    this.dummyHash = this.hasher.hash(randomBytes(16).toString("hex"));
   }
 
   // RF01
@@ -60,7 +61,10 @@ export class AuthService {
     }
 
     const hashToCompare = found ? found.passwordHash : await this.dummyHash;
-    const passwordMatches = await bcrypt.compare(input.password, hashToCompare);
+    const passwordMatches = await this.hasher.verify(
+      input.password,
+      hashToCompare,
+    );
 
     // Same message for unknown email, wrong password and inactive account.
 

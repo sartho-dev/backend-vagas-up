@@ -1,4 +1,5 @@
-process.env.TZ = process.env.BILLING_TIMEZONE || "America/Sao_Paulo";
+import { config } from "./shared/config";
+process.env.TZ = config.timezone;
 
 import { App } from "./App";
 import { buildContainer } from "./shared/container";

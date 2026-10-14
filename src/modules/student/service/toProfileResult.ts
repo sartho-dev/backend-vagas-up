@@ -1,5 +1,5 @@
 import { Student } from "../schema/Student.schema";
-import { StudentProfileResult } from "./TypesStudentsService";
+import { StudentProfileResult } from "../types/typesStudents";
 
 const byNewest = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
 

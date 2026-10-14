@@ -11,6 +11,7 @@ export function authRoutes(container: Container): Router {
 
   router.post(
     "/logout",
+    container.authenticate,
     container.authController.logoutController.bind(container.authController),
   );
 
