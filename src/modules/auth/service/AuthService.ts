@@ -1,6 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { AppError } from "../../../shared/errors/AppError";
-import { IAuthAccountProvider } from "../interfaces/IAuthAccountProvider";
+import {
+  IAuthAccountProvider,
+  LoginAccount,
+} from "../interfaces/IAuthAccountProvider";
 import { ISessionRepository } from "../interfaces/ISessionRepository";
 import { AccountRole, AuthContext } from "../types/AccountRole";
 import { LoginInput } from "../validators/LoginValidator";
@@ -45,11 +48,8 @@ export class AuthService {
 
     const emailUser = input.email;
 
-    let found: {
-      provider: IAuthAccountProvider;
-      id: string;
-      passwordHash: string;
-    } | null = null;
+    let found: ({ provider: IAuthAccountProvider } & LoginAccount) | null =
+      null;
 
     for (const provider of this.providers) {
       const account = await provider.findForLogin(emailUser);
@@ -59,16 +59,47 @@ export class AuthService {
       }
     }
 
+    const now = this.now();
+
+    // RN-A4: uma conta bloqueada responde como credencial inválida. A
+    // comparação de senha roda mesmo assim: sair antes dela tornaria a
+    // resposta visivelmente mais rápida e denunciaria que o e-mail existe,
+    // que é justamente o que a RN-A1 evita.
+    const blocked =
+      found?.blockedUntil != null &&
+      found.blockedUntil.getTime() > now.getTime();
+
     const hashToCompare = found ? found.passwordHash : await this.dummyHash;
     const passwordMatches = await this.hasher.verify(
       input.password,
       hashToCompare,
     );
 
-    // Same message for unknown email, wrong password and inactive account.
-
-    if (!found || !passwordMatches) {
+    if (blocked) {
       throw new AppError(INVALID_CREDENTIALS, 401);
+    }
+
+    // Same message for unknown email, wrong password and inactive account.
+    if (!found || !passwordMatches) {
+      if (found) {
+        const failures = found.failedLogins + 1;
+        const reached = failures >= config.loginMaxAttempts;
+
+        // Ao bloquear, o contador volta a zero: terminado o bloqueio, a conta
+        // recebe um ciclo novo e completo de tentativas.
+        await found.provider.recordLoginFailure(
+          found.id,
+          reached ? 0 : failures,
+          reached ? new Date(now.getTime() + config.loginBlockMs) : null,
+        );
+      }
+
+      throw new AppError(INVALID_CREDENTIALS, 401);
+    }
+
+    // RN-A4: login bem-sucedido zera o contador.
+    if (found.failedLogins > 0 || found.blockedUntil) {
+      await found.provider.clearLoginFailures(found.id);
     }
 
     // 256 random bits; only the hash is stored.
@@ -79,7 +110,7 @@ export class AuthService {
       accountType: found.provider.role,
       accountId: found.id,
       tokenHash,
-      now: this.now(),
+      now,
     });
 
     return {

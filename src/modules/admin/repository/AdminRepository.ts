@@ -36,7 +36,14 @@ export class AdminRepository implements IAdminRepository {
   async findByEmailWithPassword(email: string): Promise<Admin | null> {
     return await this.repository.findOne({
       where: { email, active: true },
-      select: { id: true, email: true, passwordHash: true, active: true },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        active: true,
+        failedLogins: true,
+        blockedUntil: true,
+      },
     });
   }
 
@@ -153,5 +160,22 @@ export class AdminRepository implements IAdminRepository {
     const exists = await this.repository.exists({ where: { id } });
 
     return exists ? "already_active" : "not_found";
+  }
+
+  // RN-A4
+  async recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void> {
+    await this.repository.update({ id: accountId }, { failedLogins, blockedUntil });
+  }
+
+  // RN-A4
+  async clearLoginFailures(accountId: string): Promise<void> {
+    await this.repository.update(
+      { id: accountId },
+      { failedLogins: 0, blockedUntil: null },
+    );
   }
 }

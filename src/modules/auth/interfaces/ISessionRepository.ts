@@ -32,4 +32,8 @@ export interface ISessionRepository {
     tokenHash: string;
     now: Date;
   }): Promise<Session>;
+
+  // Limpeza: remove sessões que já não podem autenticar ninguém (revogadas,
+  // ociosas além do limite ou velhas demais). Sem isso a tabela só cresce.
+  purgeExpired(now: Date, idleMs: number, maxAgeMs: number): Promise<number>;
 }

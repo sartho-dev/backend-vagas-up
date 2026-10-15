@@ -70,4 +70,13 @@ export interface IAdminRepository {
   deactivate(id: string): Promise<DeactivateOutcome>;
 
   reactivate(id: string): Promise<ReactivateOutcome>;
+
+  // RN-A4: persiste o contador de falhas e o fim do bloqueio.
+  recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void>;
+
+  clearLoginFailures(accountId: string): Promise<void>;
 }

@@ -17,12 +17,33 @@ export class AdminAuthProvider implements IAuthAccountProvider {
     // sign in).
     const admin = await this.admins.findByEmailWithPassword(email);
 
-    return admin ? { id: admin.id, passwordHash: admin.passwordHash } : null;
+    return admin
+      ? {
+          id: admin.id,
+          passwordHash: admin.passwordHash,
+          failedLogins: admin.failedLogins,
+          blockedUntil: admin.blockedUntil,
+        }
+      : null;
   }
 
   // Checked on every request by AuthService.authenticate, so deactivating an
   // admin (RF21) takes effect on the very next request.
   async isActive(accountId: string): Promise<boolean> {
     return await this.admins.existsActiveById(accountId);
+  }
+
+  // RN-A4
+  async recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void> {
+    await this.admins.recordLoginFailure(accountId, failedLogins, blockedUntil);
+  }
+
+  // RN-A4
+  async clearLoginFailures(accountId: string): Promise<void> {
+    await this.admins.clearLoginFailures(accountId);
   }
 }

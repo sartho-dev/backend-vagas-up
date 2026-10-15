@@ -39,6 +39,15 @@ export class Admin {
   // RF20 / RF21 / RNF08: deactivation instead of physical removal.
   // An admin may deactivate another admin, never themselves nor the last
   // active one (enforced in the service, inside a transaction).
+  // RN-A4: contador de falhas seguidas de login e, ao atingir o limite,
+  // o instante até o qual o login fica bloqueado. Ficam na conta (e não em
+  // tabela própria) como manda a seção 6 do SRS.
+  @Column({ name: "failed_logins", type: "int", default: 0 })
+  failedLogins: number;
+
+  @Column({ name: "blocked_until", type: "timestamptz", nullable: true })
+  blockedUntil: Date | null;
+
   @Column({ name: "active", type: "boolean", default: true })
   active: boolean;
 

@@ -74,7 +74,16 @@ Authorization: Bearer <token>
 
 O token não é decodificável: `accountId`, `role` e `idleTimeoutMinutes` vêm no corpo da resposta do login.
 
-A sessão expira após 60 minutos **sem uso** (ociosidade, não validade fixa), com teto absoluto de 24 horas.
+A sessão expira por **dois limites independentes** (RN-A3): 30 minutos **sem uso** e 8 horas desde o login. O segundo garante que uma sessão usada sem parar termine algum dia. Sair, trocar a senha ou ter a conta desativada encerra a sessão na hora.
+
+Após **5 falhas seguidas** no mesmo e-mail, o login fica bloqueado por 15 minutos (RN-A4). A resposta do bloqueio é idêntica à de senha errada — qualquer diferença confirmaria ao atacante que o e-mail existe.
+
+| variável | padrão | regra |
+|---|---|---|
+| `SESSION_IDLE_MS` | `1800000` (30 min) | RN-A3 |
+| `SESSION_MAX_AGE_MS` | `28800000` (8 h) | RN-A3 |
+| `LOGIN_MAX_ATTEMPTS` | `5` | RN-A4 |
+| `LOGIN_BLOCK_MS` | `900000` (15 min) | RN-A4 |
 
 ---
 
@@ -158,5 +167,11 @@ O `-v` aí remove só os volumes anônimos desse serviço. **Não use `docker co
 **Confira o diretório antes de rodar comandos de Docker ou npm.** Este repositório convive com outros projetos na mesma máquina; um `down -v` no diretório errado apaga o banco do projeto errado.
 
 **O TypeScript está fixado em 5.9.** O TypeScript 7 é o porte nativo em Go e não expõe `ts.sys`, de que o `ts-node` depende — com ele, `npm run dev`, `seed:admin` e todas as migrations quebram com `Cannot read properties of undefined (reading 'fileExists')`. Não suba para 7 sem antes trocar o `ts-node` por algo compatível, e note que `tsx`/esbuild não implementam `emitDecoratorMetadata`, de que o TypeORM depende.
+
+**Arquivos gerados pelo container nascem com dono `root`.** A pasta `src/shared/database/migrations/` foi criada pelo container e pertence a `root`, então `migration:generate` rodado no host falha com `EACCES`. Ou gere sempre pelo container, ou devolva a pasta para o seu usuário:
+
+```bash
+sudo chown -R "$USER:$USER" src/shared/database/migrations
+```
 
 **`POSTGRES_DB` só vale na primeira inicialização.** Mudou `DB_DATABASE` e o banco "não existe"? O volume foi criado com o nome antigo. Recrie o volume do Postgres daquele projeto.

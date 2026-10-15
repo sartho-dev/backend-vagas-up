@@ -127,7 +127,14 @@ export class StudentRepository implements IStudentRepository {
   async findByEmailWithPassword(email: string): Promise<Student | null> {
     return await this.repository.findOne({
       where: { email, active: true },
-      select: { id: true, email: true, passwordHash: true, active: true },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        active: true,
+        failedLogins: true,
+        blockedUntil: true,
+      },
     });
   }
 
@@ -256,5 +263,22 @@ export class StudentRepository implements IStudentRepository {
     if (result.affected === 0) {
       throw new AppError("Student not found", 404);
     }
+  }
+
+  // RN-A4
+  async recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void> {
+    await this.repository.update({ id: accountId }, { failedLogins, blockedUntil });
+  }
+
+  // RN-A4
+  async clearLoginFailures(accountId: string): Promise<void> {
+    await this.repository.update(
+      { id: accountId },
+      { failedLogins: 0, blockedUntil: null },
+    );
   }
 }
