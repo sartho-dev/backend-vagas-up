@@ -92,6 +92,19 @@ Após **5 falhas seguidas** no mesmo e-mail, o login fica bloqueado por 15 minut
 | `SESSION_MAX_AGE_MS` | `28800000` (8 h) | RN-A3 |
 | `LOGIN_MAX_ATTEMPTS` | `5` | RN-A4 |
 | `LOGIN_BLOCK_MS` | `900000` (15 min) | RN-A4 |
+| `RECOVERY_TOKEN_TTL_MS` | `1800000` (30 min) | RN-A6 |
+| `INVITE_TOKEN_TTL_MS` | `259200000` (72 h) | RF22 |
+
+### Tokens de uso único e e-mail
+
+Links enviados por e-mail — recuperação de senha, convite de responsável e confirmação de troca de e-mail — usam a tabela `single_use_tokens`. Como nas sessões, **só o hash SHA-256 é guardado**: um banco vazado não entrega nenhum link utilizável.
+
+Duas garantias que valem conhecer antes de mexer:
+
+- **O token é consumido na mesma transação da ação que ele autoriza.** Se a ação falhar, o rollback desfaz a marcação e o link continua válido. Se der certo, ele morre junto. A linha é travada com `pessimistic_write`, então dois cliques no mesmo link não executam a ação duas vezes.
+- **Um pedido novo invalida o anterior** do mesmo tipo e destinatário (RN-A6). Token inexistente, já usado e expirado são indistinguíveis para quem chama — qualquer diferença viraria um oráculo.
+
+O envio passa por `IEmailSender`. Sem `SMTP_HOST` e `SMTP_USER` configurados, o container escolhe o `ConsoleEmailSender`, que escreve o e-mail no log — assim o primeiro `npm run dev` numa máquina nova não quebra no fluxo de recuperação. Os testes injetam o `TestEmailSender`, que guarda em memória.
 
 ---
 

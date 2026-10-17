@@ -5,6 +5,7 @@ import { config } from "../config";
 
 import { Admin } from "../../modules/admin/schema/Admin.schema";
 import { Session } from "../../modules/auth/schema/Session.schema";
+import { SingleUseToken } from "../../modules/auth/schema/SingleUseToken.schema";
 import { Student } from "../../modules/student/schema/Student.schema";
 import { StudentCertification } from "../../modules/student/schema/StudentCertification.schema";
 import { StudentExperience } from "../../modules/student/schema/StudentExperience.schema";
@@ -18,6 +19,7 @@ import { Init1790969876891 } from "./migrations/1790969876891-Init";
 import { Init1791845311089 } from "./migrations/1791845311089-Init";
 import { LoginAttempts1792085200837 } from "./migrations/1792085200837-LoginAttempts";
 import { CandidateProfileV491792257488337 } from "./migrations/1792257488337-CandidateProfileV49";
+import { SingleUseTokens1792270518043 } from "./migrations/1792270518043-SingleUseTokens";
 
 // Define a pasta base dependendo do ambiente
 const baseDir = path.join(__dirname, "../../");
@@ -35,6 +37,7 @@ export const AppDataSource = new DataSource({
   entities: [
     Admin,
     Session,
+    SingleUseToken,
     Student,
     StudentCertification,
     StudentExperience,
@@ -52,6 +55,7 @@ export const AppDataSource = new DataSource({
     Init1791845311089,
     LoginAttempts1792085200837,
     CandidateProfileV491792257488337,
+    SingleUseTokens1792270518043,
   ],
 
   // Isso força o SSL necessário para o Google Cloud SQL

@@ -29,6 +29,7 @@ export async function createTestContext(): Promise<TestContext> {
 
   const container = buildContainer({
     passwordHasher: hasher,
+    emailSender,
   });
 
   const app = new App(container);
