@@ -178,4 +178,14 @@ export class AdminRepository implements IAdminRepository {
       { failedLogins: 0, blockedUntil: null },
     );
   }
+
+  // RN-A6
+  async updatePassword(accountId: string, passwordHash: string): Promise<void> {
+    await this.repository.update({ id: accountId }, { passwordHash });
+  }
+
+  // RF03
+  async updateEmail(accountId: string, email: string): Promise<void> {
+    await this.repository.update({ id: accountId }, { email });
+  }
 }

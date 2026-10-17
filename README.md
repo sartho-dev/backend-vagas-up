@@ -68,7 +68,21 @@ Rotas do próprio perfil:
 | `PATCH /api/v1/students/me` | nome, telefones, cidade, escolaridade, visibilidade, perfil profissional |
 | `PATCH /api/v1/students/me/password` | troca de senha; exige a atual e **encerra todas as sessões** (RN-A3) |
 
-Trocar o e-mail **não** passa por aqui: o RF03 exige confirmação por link no novo endereço, e isso é a task 07.
+Trocar o e-mail **não** passa pelo perfil: tem fluxo próprio, com confirmação.
+
+Recuperação de senha e troca de e-mail:
+
+| rota | sessão | o que faz |
+|---|---|---|
+| `POST /api/v1/auth/password-recovery` | não | pede o link. **Sempre 204**, exista ou não o e-mail |
+| `POST /api/v1/auth/password-recovery/confirm` | não | redefine a senha e encerra todas as sessões |
+| `POST /api/v1/auth/email-change` | sim | pede a troca; o link vai para o **endereço novo** |
+| `POST /api/v1/auth/email-change/confirm` | não | conclui a troca e encerra todas as sessões |
+
+Duas coisas que parecem detalhe e não são:
+
+- O link da troca de e-mail vai para o **novo** endereço, nunca para o atual. É o que prova que a pessoa controla a caixa para a qual a conta vai passar — sem isso, quem achasse um navegador logado tomaria a conta e o dono perderia até o caminho de recuperação.
+- A unicidade do e-mail (RN-A7) é conferida **no pedido e de novo na confirmação**. Entre os dois momentos, outra conta pode ter registrado o endereço.
 
 ### Autenticação
 

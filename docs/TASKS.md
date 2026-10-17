@@ -65,7 +65,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 04 | Alinhar o candidato à v4.9 | RF10, RF12, RF13, RN-C1, RN-C2, RN-C9, RN-C10, RN-C11 | 01 | **Fechada** |
 | 05 | Perfil próprio e troca de senha | RF03, RN-A3, RN-A5 | 04 | **Fechada** |
 | 06 | E-mail e tokens de uso único | RNF01 | 01 | **Fechada** |
-| 07 | Recuperação de senha e troca de e-mail | RF01, RF03, RN-A6 | 06, 03 | A fazer |
+| 07 | Recuperação de senha e troca de e-mail | RF01, RF03, RN-A6 | 06, 03 | **Fechada** |
 | 08 | Cursos | RF33 | 02 | A fazer |
 | 09 | Formações do candidato | RF11, RN-C2, RN-C4 | 04, 08 | A fazer |
 | 10 | Anunciante e responsável | RF20, RF22, RF23, RN-VG8 | 06, 07 | A fazer |
@@ -274,6 +274,14 @@ Recuperação de senha, convite de responsável e troca de e-mail dependem de en
 ---
 
 # TASK 07: Recuperação de senha e troca de e-mail
+
+> **Status: fechada (17/10/2026).** 21 testes novos; suíte em 96. Sem migration — usa a tabela da task 06.
+>
+> Entregue: as quatro rotas (`password-recovery`, `password-recovery/confirm`, `email-change`, `email-change/confirm`), `AccountRecoveryService` e os métodos `updatePassword`/`updateEmail` no contrato dos providers, valendo para candidato e admin sem código duplicado.
+>
+> **RN-A7 conferida duas vezes**, no pedido e na confirmação. Entre um e outro, outra conta pode registrar o endereço — confiar só no pedido deixaria dois donos para o mesmo e-mail. Há teste para essa corrida.
+>
+> **Limitação conhecida — canal lateral de tempo.** A resposta do pedido de recuperação é idêntica nos dois casos (204, corpo vazio), mas quando a conta **existe** o servidor ainda grava o token e envia o e-mail, então responde mais devagar. Um atacante paciente, medindo tempo, consegue distinguir. Mitigar exige responder antes de despachar o e-mail (fila ou envio fora do caminho da requisição), o que não cabia nesta task. **O corpo e o status não vazam nada**; o que resta é o tempo. Vale reavaliar quando houver fila de e-mail (candidato natural: task 21, notificações).
 
 ## Entregas
 - `POST /api/v1/auth/password-recovery` (RN-A6): **resposta sempre igual**, exista ou não o e-mail. Link vale 30 min e um uso.

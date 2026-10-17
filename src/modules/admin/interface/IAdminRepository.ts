@@ -79,4 +79,8 @@ export interface IAdminRepository {
   ): Promise<void>;
 
   clearLoginFailures(accountId: string): Promise<void>;
+
+  // RN-A6 / RF03
+  updatePassword(accountId: string, passwordHash: string): Promise<void>;
+  updateEmail(accountId: string, email: string): Promise<void>;
 }
