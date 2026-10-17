@@ -76,6 +76,9 @@ export interface IStudentRepository {
   // RF03 / RN-A5
   updatePassword(studentId: string, passwordHash: string): Promise<void>;
 
+  // RF03: só depois da confirmação pelo novo endereço.
+  updateEmail(studentId: string, email: string): Promise<void>;
+
   // RF10 / RNF08: deactivation, never physical deletion
   deactivate(studentId: string): Promise<void>;
 

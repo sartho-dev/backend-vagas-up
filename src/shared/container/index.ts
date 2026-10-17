@@ -18,6 +18,8 @@ import { AccountRole } from "../../modules/auth/types/AccountRole";
 import { SingleUseToken } from "../../modules/auth/schema/SingleUseToken.schema";
 import { SingleUseTokenRepository } from "../../modules/auth/repository/SingleUseTokenRepository";
 import { SingleUseTokenService } from "../../modules/auth/service/SingleUseTokenService";
+import { AccountRecoveryService } from "../../modules/auth/service/AccountRecoveryService";
+import { RecoveryController } from "../../modules/auth/controller/RecoveryController";
 import {
   ConsoleEmailSender,
   IEmailSender,
@@ -77,6 +79,19 @@ export function buildContainer(options: ContainerOptions = {}) {
     new SessionRepository(AppDataSource.getRepository(Session)),
     hasher,
   );
+  const recoveryService = new AccountRecoveryService(
+    [
+      new StudentAuthProvider(studentRepository),
+      new AdminAuthProvider(adminRepository),
+    ],
+    singleUseTokens,
+    emailRegistry,
+    emailSender,
+    hasher,
+    authService,
+  );
+  const recoveryController = new RecoveryController(recoveryService);
+
   const authController = new AuthController(authService);
   const authenticate = makeAuthenticate(authService);
 
@@ -104,6 +119,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     singleUseTokens,
     studentController,
     authController,
+    recoveryController,
     adminController,
     authenticate,
   };

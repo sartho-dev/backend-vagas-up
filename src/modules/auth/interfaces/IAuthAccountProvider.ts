@@ -31,4 +31,12 @@ export interface IAuthAccountProvider {
 
   // RN-A4: a successful login clears the counter.
   clearLoginFailures(accountId: string): Promise<void>;
+
+  // RN-A6: password recovery writes the new hash. The rule (length, cost) is
+  // applied upstream — the provider only persists.
+  updatePassword(accountId: string, passwordHash: string): Promise<void>;
+
+  // RF03: the email only changes after the owner confirms it through the
+  // link sent to the NEW address.
+  updateEmail(accountId: string, email: string): Promise<void>;
 }

@@ -302,4 +302,9 @@ export class StudentRepository implements IStudentRepository {
   async updatePassword(studentId: string, passwordHash: string): Promise<void> {
     await this.repository.update({ id: studentId }, { passwordHash });
   }
+
+  // RF03: só chamado depois da confirmação pelo novo endereço.
+  async updateEmail(studentId: string, email: string): Promise<void> {
+    await this.repository.update({ id: studentId }, { email });
+  }
 }

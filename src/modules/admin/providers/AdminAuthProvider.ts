@@ -46,4 +46,14 @@ export class AdminAuthProvider implements IAuthAccountProvider {
   async clearLoginFailures(accountId: string): Promise<void> {
     await this.admins.clearLoginFailures(accountId);
   }
+
+  // RN-A6
+  async updatePassword(accountId: string, passwordHash: string): Promise<void> {
+    await this.admins.updatePassword(accountId, passwordHash);
+  }
+
+  // RF03
+  async updateEmail(accountId: string, email: string): Promise<void> {
+    await this.admins.updateEmail(accountId, email);
+  }
 }
