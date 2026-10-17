@@ -15,6 +15,15 @@ import { Session } from "../../modules/auth/schema/Session.schema";
 import { AuthController } from "../../modules/auth/controller/AuthController";
 import { makeAuthenticate } from "../../modules/auth/middleware/authenticate";
 import { AccountRole } from "../../modules/auth/types/AccountRole";
+import { SingleUseToken } from "../../modules/auth/schema/SingleUseToken.schema";
+import { SingleUseTokenRepository } from "../../modules/auth/repository/SingleUseTokenRepository";
+import { SingleUseTokenService } from "../../modules/auth/service/SingleUseTokenService";
+import {
+  ConsoleEmailSender,
+  IEmailSender,
+  SmtpEmailSender,
+} from "../services/EmailSender";
+import { config } from "../config";
 import { EmailRegistry, IEmailLookup } from "../services/EmailRegistry";
 import {
   BcryptPasswordHasher,
@@ -23,12 +32,25 @@ import {
 
 export type ContainerOptions = {
   passwordHasher?: IPasswordHasher;
+  // Os testes injetam o TestEmailSender; sem SMTP configurado, cai no
+  // ConsoleEmailSender para a aplicação subir numa máquina nova.
+  emailSender?: IEmailSender;
 };
 
 export type Container = ReturnType<typeof buildContainer>;
 
 export function buildContainer(options: ContainerOptions = {}) {
   const hasher = options.passwordHasher ?? new BcryptPasswordHasher();
+
+  const emailSender =
+    options.emailSender ??
+    (config.mail.host && config.mail.user
+      ? new SmtpEmailSender()
+      : new ConsoleEmailSender());
+
+  const singleUseTokens = new SingleUseTokenService(
+    new SingleUseTokenRepository(AppDataSource.getRepository(SingleUseToken)),
+  );
 
   const studentRepository = new StudentRepository(
     AppDataSource.getRepository(Student),
@@ -78,6 +100,8 @@ export function buildContainer(options: ContainerOptions = {}) {
   const adminController = new AdminController(adminService);
 
   return {
+    emailSender,
+    singleUseTokens,
     studentController,
     authController,
     adminController,

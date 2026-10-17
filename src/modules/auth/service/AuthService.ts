@@ -1,5 +1,6 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { AppError } from "../../../shared/errors/AppError";
+import { hashToken } from "../../../shared/utils/hashToken";
 import {
   IAuthAccountProvider,
   LoginAccount,
@@ -21,10 +22,6 @@ export type LoginResult = {
 // inativa. Qualquer variacao aqui vira um oraculo de enumeracao de contas.
 const INVALID_CREDENTIALS = "E-mail ou senha inválidos";
 const INVALID_SESSION = "Invalid or expired session";
-
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
 
 export class AuthService {
   private providersByRole: Map<AccountRole, IAuthAccountProvider>;

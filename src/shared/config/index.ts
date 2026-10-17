@@ -20,6 +20,13 @@ export const config = {
   sessionIdleMs: Number(process.env.SESSION_IDLE_MS ?? 1_800_000),
   sessionMaxAgeMs: Number(process.env.SESSION_MAX_AGE_MS ?? 28_800_000),
 
+  // Tokens de uso único enviados por e-mail.
+  //   RN-A6: link de recuperação vale 30 min (vale também para a troca de
+  //          e-mail, que tem o mesmo risco de tomada de conta).
+  //   RF22:  convite de responsável vale 72 h.
+  recoveryTokenTtlMs: Number(process.env.RECOVERY_TOKEN_TTL_MS ?? 1_800_000),
+  inviteTokenTtlMs: Number(process.env.INVITE_TOKEN_TTL_MS ?? 259_200_000),
+
   // RN-A4: 5 falhas seguidas no mesmo e-mail bloqueiam o login por 15 min.
   loginMaxAttempts: Number(process.env.LOGIN_MAX_ATTEMPTS ?? 5),
   loginBlockMs: Number(process.env.LOGIN_BLOCK_MS ?? 900_000),

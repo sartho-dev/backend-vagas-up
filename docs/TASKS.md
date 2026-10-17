@@ -64,7 +64,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 03 | Sessão e login conforme RN-A | RN-A3, RN-A4 | 01 | **Fechada** |
 | 04 | Alinhar o candidato à v4.9 | RF10, RF12, RF13, RN-C1, RN-C2, RN-C9, RN-C10, RN-C11 | 01 | **Fechada** |
 | 05 | Perfil próprio e troca de senha | RF03, RN-A3, RN-A5 | 04 | **Fechada** |
-| 06 | E-mail e tokens de uso único | RNF01 | 01 | A fazer |
+| 06 | E-mail e tokens de uso único | RNF01 | 01 | **Fechada** |
 | 07 | Recuperação de senha e troca de e-mail | RF01, RF03, RN-A6 | 06, 03 | A fazer |
 | 08 | Cursos | RF33 | 02 | A fazer |
 | 09 | Formações do candidato | RF11, RN-C2, RN-C4 | 04, 08 | A fazer |
@@ -242,6 +242,16 @@ Hoje há `POST /students` e `PATCH /students`. Falta leitura do próprio perfil,
 ---
 
 # TASK 06: E-mail e tokens de uso único
+
+> **Status: fechada (17/10/2026).** 17 testes novos; suíte em 75.
+>
+> Entregue: `IEmailSender` com implementação SMTP (nodemailer) e fallback de console; tabela `single_use_tokens` guardando só o hash SHA-256; `SingleUseTokenService` com emissão, consumo transacional e limpeza; TTLs configuráveis (30 min recuperação, 72 h convite).
+>
+> **Decisão sobre `advertiser_id`:** a coluna **não** entrou. A tabela `advertisers` só existe na task 10, e criar um `uuid` solto agora seria uma FK sem restrição no banco — contra a convenção da RNF06. A task 10 adiciona coluna e FK juntas. Os campos `account_type`/`account_id` já são anuláveis, que é o que o convite precisa (a conta do convidado não existe quando o link é gerado).
+>
+> **Refatoração de passagem:** o `hashToken` estava privado no `AuthService`; virou `shared/utils/hashToken.ts`, usado por sessões e tokens. O comentário lá explica por que SHA-256 sem sal serve para token e não serviria para senha.
+>
+> **Correção de passagem no `truncateAll`:** ele engolia falhas com `console.warn`. Isso fazia sentido quando as migrations estavam quebradas (task 01), mas agora significaria dados de um teste vazando para o seguinte **em silêncio**. Passou a falhar alto, e ganhou a tabela nova.
 
 ## Contexto
 Recuperação de senha, convite de responsável e troca de e-mail dependem de envio de e-mail e de token de uso único. A infraestrutura de teste já tem o `TestEmailSender`.
