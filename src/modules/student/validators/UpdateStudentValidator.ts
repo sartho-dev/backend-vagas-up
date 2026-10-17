@@ -6,6 +6,10 @@ import {
   urlSchema,
   bioSchema,
   calendarDateSchema,
+  citySchema,
+  educationLevelSchema,
+  visibilitySchema,
+  resumeUrlSchema,
 } from "./CreateStudentValidator";
 import { LanguageLevel } from "../schema/StudentLanguage.schema";
 
@@ -158,9 +162,19 @@ export const updateStudentSchema = z
     name: nameSchema.optional(),
     email: emailSchema.optional(),
     phones: phonesSchema.optional(),
+    city: citySchema.optional(),
+    educationLevel: educationLevelSchema.optional(),
+
+    // RF13 / RN-C9: a mudança de visibilidade vale na hora. A trava de idade
+    // para PUBLICO não pode ficar aqui — depende da data de nascimento já
+    // gravada, que o validator não tem. Fica no service.
+    visibility: visibilitySchema.optional(),
 
     // --- Professional profile ---
     bio: bioSchema.optional(),
+    photoUrl: urlSchema.optional(),
+    // RN-C10: https e domínio permitido.
+    resumeUrl: resumeUrlSchema.optional(),
     linkedinUrl: urlSchema.optional(),
     portfolioUrl: urlSchema.optional(),
 

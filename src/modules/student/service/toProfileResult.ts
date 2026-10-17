@@ -10,8 +10,16 @@ export function toProfileResult(student: Student): StudentProfileResult {
     name: student.name,
     email: student.email,
     birthDate: student.birthDate,
-    phones: student.phones.map((phone) => phone.number),
+    city: student.city,
+    educationLevel: student.educationLevel,
+    visibility: student.visibility,
+    phones: student.phones.map((phone) => ({
+      number: phone.number,
+      isWhatsapp: phone.isWhatsapp,
+    })),
     bio: student.bio,
+    photoUrl: student.photoUrl,
+    resumeUrl: student.resumeUrl,
     linkedinUrl: student.linkedinUrl,
     portfolioUrl: student.portfolioUrl,
     languages: student.languages

@@ -148,9 +148,17 @@ Convenções:
 
 - **Código em inglês, mensagens de erro em português** — o usuário final é brasileiro, e a RN23 exige a string exata `"E-mail ou senha inválidos"`.
 - Senhas com bcrypt, custo mínimo 12 (RNF01), centralizado no `PasswordHasher`.
-- Chaves primárias UUID (RNF09); CPF e CNPJ são únicos, nunca chave.
-- Desativação lógica (`active = false`), nunca exclusão física (RNF08).
-- Datas em `timestamptz`, fuso `America/Campo_Grande` (RN28).
+- Chaves primárias UUID; CPF e CNPJ são únicos, nunca chave.
+- Desativação lógica (`active = false`), nunca exclusão física (RNF06).
+- Datas em `timestamptz`, fuso `America/Campo_Grande`.
+
+### Regras do candidato que valem conhecer
+
+- **Idade mínima: 14 anos** (RN-C1), em `MIN_AGE_YEARS`, calculada no fuso de Campo Grande.
+- **Visibilidade do perfil** (RN-C9): `oculto` (padrão), `so_verificados`, `publico`. **Menor de 18 não pode escolher `publico`** — travado no cadastro (validator) e na edição (service).
+- **Link de currículo** (RN-C10): só `https` e só de domínios permitidos (Google Drive, OneDrive, Dropbox, LinkedIn, GitHub, Canva). O sistema **nunca armazena o arquivo**.
+- **CPF** (Anexo A): o candidato vê o próprio, o administrador vê todos, o anunciante **nunca**. O helper `maskCpf` existe para a trava do anunciante (tasks 17 e 18).
+- **Telefone é opcional** (RF10) e cada número carrega a marca de WhatsApp (RN-C11).
 
 ---
 

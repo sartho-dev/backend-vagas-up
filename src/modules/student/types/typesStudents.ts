@@ -1,4 +1,11 @@
 import { Student } from "../schema/Student.schema";
+import { EducationLevel, ProfileVisibility } from "./StudentEnums";
+
+// RN-C11: o número sai sempre acompanhado da marca de WhatsApp.
+export type PhoneResult = {
+  number: string;
+  isWhatsapp: boolean;
+};
 
 export type StudentCreatedResult = {
   id: string;
@@ -6,8 +13,11 @@ export type StudentCreatedResult = {
   name: string;
   email: string;
   birthDate: string;
-  // RF03: one or more phone numbers are required at sign-up
-  phones: string[];
+  city: string;
+  educationLevel: EducationLevel;
+  visibility: ProfileVisibility;
+  // RF10: telefone é opcional na v4.9; pode vir vazio.
+  phones: PhoneResult[];
 };
 
 export type StudentProfileResult = {
@@ -16,8 +26,13 @@ export type StudentProfileResult = {
   name: string;
   email: string;
   birthDate: string;
-  phones: string[];
+  city: string;
+  educationLevel: EducationLevel;
+  visibility: ProfileVisibility;
+  phones: PhoneResult[];
   bio: string | null;
+  photoUrl: string | null;
+  resumeUrl: string | null;
   linkedinUrl: string | null;
   portfolioUrl: string | null;
   languages: { name: string; level: string }[];

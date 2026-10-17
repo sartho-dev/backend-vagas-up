@@ -17,6 +17,7 @@ import { Init1790966781806 } from "./migrations/1790966781806-Init";
 import { Init1790969876891 } from "./migrations/1790969876891-Init";
 import { Init1791845311089 } from "./migrations/1791845311089-Init";
 import { LoginAttempts1792085200837 } from "./migrations/1792085200837-LoginAttempts";
+import { CandidateProfileV491792257488337 } from "./migrations/1792257488337-CandidateProfileV49";
 
 // Define a pasta base dependendo do ambiente
 const baseDir = path.join(__dirname, "../../");
@@ -50,6 +51,7 @@ export const AppDataSource = new DataSource({
     Init1790969876891,
     Init1791845311089,
     LoginAttempts1792085200837,
+    CandidateProfileV491792257488337,
   ],
 
   // Isso força o SSL necessário para o Google Cloud SQL

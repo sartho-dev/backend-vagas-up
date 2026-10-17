@@ -1,7 +1,11 @@
-// RN26 / PR7: idade mínima. A constante fica em um ponto só.
-export const MIN_AGE_YEARS = 16;
+// RN-C1 / P4: idade mínima no cadastro. A v4.9 define 14 anos (idade legal
+// do jovem aprendiz, CLT art. 428). A história de usuário da seção 7 do SRS
+// ainda diz 16 — contradição decidida em favor da RN-C1 (14) em 17/10/2026.
+// A constante fica em um ponto só para a P4 (conferência jurídica) mudar
+// isso numa linha.
+export const MIN_AGE_YEARS = 14;
 
-// RN28: pega ano/mês/dia no fuso de negócio, não em UTC.
+// Pega ano/mês/dia no fuso de negócio (America/Campo_Grande), não em UTC.
 // `Intl` resolve sem dependência extra (date-fns-tz etc.).
 function localDateParts(
   date: Date,
@@ -22,7 +26,7 @@ function localDateParts(
 
 // Idade completa em anos, com precisão de dia, no fuso informado.
 // Exportada para o teste conseguir injetar `now` e testar o dia exato
-// do aniversário de 16 anos.
+// do aniversário que atinge a idade mínima.
 export function hasMinimumAge(
   birthDate: string,
   minYears: number,

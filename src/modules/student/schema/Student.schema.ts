@@ -6,6 +6,10 @@ import {
   PrimaryGeneratedColumn,
 } from "typeorm";
 import { StudentPhone } from "./StudentPhone.schema";
+import {
+  EducationLevel,
+  ProfileVisibility,
+} from "../types/StudentEnums";
 import { StudentLanguage } from "./StudentLanguage.schema";
 import { StudentExperience } from "./StudentExperience.schema";
 import { StudentSkill } from "./StudentSkill.schema";
@@ -42,6 +46,34 @@ export class Student {
 
   @Column({ name: "birth_date", type: "date" })
   birthDate: string;
+
+  // RF10: cidade do candidato. O atendimento começa por Campo Grande, mas o
+  // campo existe desde já para a expansão (SRS 1.2).
+  @Column({ name: "city", type: "varchar", length: 120 })
+  city: string;
+
+  // RN-C2: lista fixa. Usada pela RN-C3 para comparar com a escolaridade
+  // mínima da vaga.
+  @Column({ name: "education_level", type: "enum", enum: EducationLevel })
+  educationLevel: EducationLevel;
+
+  // RN-C9: padrão OCULTO — ninguém é exposto sem escolher.
+  @Column({
+    name: "visibility",
+    type: "enum",
+    enum: ProfileVisibility,
+    default: ProfileVisibility.HIDDEN,
+  })
+  visibility: ProfileVisibility;
+
+  // RF12: foto do perfil. A tela orienta a usar foto real, não gerada por IA.
+  @Column({ name: "photo_url", type: "varchar", length: 255, nullable: true })
+  photoUrl: string | null;
+
+  // RN-C10: link externo de currículo. O sistema NUNCA armazena o arquivo,
+  // só o endereço, e apenas de domínios permitidos.
+  @Column({ name: "resume_url", type: "varchar", length: 255, nullable: true })
+  resumeUrl: string | null;
 
   @Column({ name: "bio", type: "text", nullable: true })
   bio: string | null;
