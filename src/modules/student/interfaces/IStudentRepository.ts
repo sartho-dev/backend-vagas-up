@@ -69,6 +69,13 @@ export interface IStudentRepository {
     active?: boolean;
   }): Promise<{ items: Student[]; total: number }>;
 
+  // RF03: o hash só sai daqui e do login. Usado para conferir a senha atual
+  // antes de trocá-la.
+  findByIdWithPassword(id: string): Promise<Student | null>;
+
+  // RF03 / RN-A5
+  updatePassword(studentId: string, passwordHash: string): Promise<void>;
+
   // RF10 / RNF08: deactivation, never physical deletion
   deactivate(studentId: string): Promise<void>;
 

@@ -63,7 +63,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 02 | Admin: base e gestão de admins | RF32, RF34, RN-A7 | 01 | **Fechada** |
 | 03 | Sessão e login conforme RN-A | RN-A3, RN-A4 | 01 | **Fechada** |
 | 04 | Alinhar o candidato à v4.9 | RF10, RF12, RF13, RN-C1, RN-C2, RN-C9, RN-C10, RN-C11 | 01 | **Fechada** |
-| 05 | Perfil próprio e troca de senha | RF03, RN-A3, RN-A5 | 04 | A fazer |
+| 05 | Perfil próprio e troca de senha | RF03, RN-A3, RN-A5 | 04 | **Fechada** |
 | 06 | E-mail e tokens de uso único | RNF01 | 01 | A fazer |
 | 07 | Recuperação de senha e troca de e-mail | RF01, RF03, RN-A6 | 06, 03 | A fazer |
 | 08 | Cursos | RF33 | 02 | A fazer |
@@ -212,6 +212,16 @@ O módulo `student` foi escrito para a v3.2 e carrega campos que a v4.9 não tem
 ---
 
 # TASK 05: Perfil próprio e troca de senha
+
+> **Status: fechada (17/10/2026).** 18 testes novos; suíte em 58. Sem migration — nenhuma mudança de schema.
+>
+> Entregue: `GET /students/me` (com CPF completo, Anexo A), `PATCH /students/me`, `PATCH /students/me/password` com encerramento de todas as sessões, e `authorize(AccountRole.STUDENT)` fechando o perfil.
+>
+> **O furo do RF02 foi fechado.** O `PATCH /students` tinha só `authenticate`: um token de admin chegava ao service do candidato. Como o `POST /students` é público, o `authorize` não cabia no router inteiro — as rotas de perfil foram para um sub-router `/me` com `router.use(authenticate, authorize(STUDENT))` aplicado uma vez, para nenhuma rota nova de perfil esquecer.
+>
+> **A troca de e-mail saiu da edição.** O campo não é mais aceito no `PATCH /students/me`: o RF03 exige confirmação por link no novo endereço. Aceitar sem confirmar deixaria alguém tomar a conta a partir de um navegador esquecido aberto. O `EmailRegistry.isTakenByOther` continua no lugar, esperando a task 07 — é lá que a RN-A7 será conferida, **no momento da confirmação** e não no do pedido.
+>
+> **Troca de senha em rota própria**, e não misturada à edição de perfil: ela encerra todas as sessões (RN-A3), e esconder esse efeito dentro de um "mudei minha cidade" tornaria a consequência invisível para quem chama.
 
 ## Contexto
 Hoje há `POST /students` e `PATCH /students`. Falta leitura do próprio perfil, e o `PATCH` tem só `authenticate`, sem `authorize` — um token de admin alcança o service, contra o RF02.

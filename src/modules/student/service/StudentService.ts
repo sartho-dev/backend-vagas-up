@@ -1,7 +1,11 @@
 import { AppError } from "../../../shared/errors/AppError";
 import { IStudentRepository } from "../interfaces/IStudentRepository";
 import { CreateStudentInput } from "../validators/CreateStudentValidator";
-import { UpdateStudentInput } from "../validators/UpdateStudentValidator";
+import {
+  ChangePasswordInput,
+  UpdateStudentInput,
+} from "../validators/UpdateStudentValidator";
+import { ISessionRevoker } from "../../auth/interfaces/ISessionRevoker";
 import {
   StudentCreatedResult,
   StudentProfileResult,
@@ -25,6 +29,8 @@ export class StudentService {
     private repository: IStudentRepository,
     private emails: EmailRegistry,
     private hasher: IPasswordHasher,
+    // RN-A3: trocar a senha encerra todas as sessões da conta.
+    private sessions: ISessionRevoker,
   ) {}
 
   async createService(data: CreateStudentInput): Promise<StudentCreatedResult> {
@@ -78,19 +84,10 @@ export class StudentService {
     studentId: string,
     data: UpdateStudentInput,
   ): Promise<StudentProfileResult> {
-    // RN06: only when the email is actually being changed. The check excludes
-    // this student, so re-sending their current email is not a conflict. The
-    // database unique constraint (409 in the repository) still covers the
-    // simultaneous-request case.
-    if (
-      data.email !== undefined &&
-      (await this.emails.isTakenByOther(data.email, {
-        role: AccountRole.STUDENT,
-        id: studentId,
-      }))
-    ) {
-      throw new AppError("Email already in use", 409);
-    }
+    // A troca de e-mail saiu daqui: RF03 exige confirmação por link, que é a
+    // task 07. O `emails.isTakenByOther` continua no EmailRegistry esperando
+    // esse fluxo — é lá que a RN-A7 será conferida, no momento em que o
+    // titular confirmar o novo endereço.
 
     // RN-C9: menor de 18 não pode tornar o perfil público. No cadastro a
     // trava está no validator, que tem a data de nascimento em mãos; aqui ela
@@ -127,5 +124,48 @@ export class StudentService {
     }
 
     return toProfileResult(student);
+  }
+
+  // RF03 / Anexo A: o candidato lê o próprio perfil COM o CPF completo —
+  // `Ver CPF → Candidato: Próprio`.
+  async getOwnProfileService(studentId: string): Promise<StudentProfileResult> {
+    const student = await this.repository.findById(studentId);
+
+    if (!student) {
+      throw new AppError("Student not found", 404);
+    }
+
+    return toProfileResult(student);
+  }
+
+  // RF03 / RN-A5 / RN-A3
+  async changePasswordService(
+    studentId: string,
+    data: ChangePasswordInput,
+  ): Promise<void> {
+    const current = await this.repository.findByIdWithPassword(studentId);
+
+    if (!current) {
+      throw new AppError("Student not found", 404);
+    }
+
+    const matches = await this.hasher.verify(
+      data.currentPassword,
+      current.passwordHash,
+    );
+
+    // 400 e não 401: um 401 pareceria sessão expirada para o cliente, que
+    // mandaria o usuário fazer login de novo em vez de corrigir a senha.
+    if (!matches) {
+      throw new AppError("A senha atual está incorreta", 400);
+    }
+
+    const passwordHash = await this.hasher.hash(data.newPassword);
+    await this.repository.updatePassword(studentId, passwordHash);
+
+    // RN-A3: encerra TODAS as sessões, inclusive a que fez esta requisição.
+    // É o que torna a troca de senha uma defesa de verdade: se alguém estava
+    // com a conta aberta, perde o acesso agora.
+    await this.sessions.revokeAllSessions(AccountRole.STUDENT, studentId);
   }
 }
