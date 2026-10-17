@@ -81,4 +81,24 @@ export class SessionRepository implements ISessionRepository {
       return await tm.save(session);
     });
   }
+
+  async purgeExpired(
+    now: Date,
+    idleMs: number,
+    maxAgeMs: number,
+  ): Promise<number> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .delete()
+      .where("revoked_at IS NOT NULL")
+      .orWhere("last_used_at < :idleCutoff", {
+        idleCutoff: new Date(now.getTime() - idleMs),
+      })
+      .orWhere("created_at < :ageCutoff", {
+        ageCutoff: new Date(now.getTime() - maxAgeMs),
+      })
+      .execute();
+
+    return result.affected ?? 0;
+  }
 }

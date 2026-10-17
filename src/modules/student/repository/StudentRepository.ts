@@ -41,7 +41,8 @@ export class StudentRepository implements IStudentRepository {
   constructor(private repository: Repository<Student>) {}
 
   // RF03: the student and their phone numbers are written together, so a
-  // failure halfway through never leaves a student without a phone.
+  // failure halfway through never leaves a half-written candidate.
+  // (RF10 made the phone optional, so an empty list is valid.)
   async create(data: CreateStudentData): Promise<Student> {
     try {
       return await this.repository.manager.transaction(async (tm) => {
@@ -51,9 +52,12 @@ export class StudentRepository implements IStudentRepository {
           email: data.email,
           passwordHash: data.passwordHash,
           birthDate: data.birthDate,
+          city: data.city,
+          educationLevel: data.educationLevel,
+          visibility: data.visibility,
           termsAcceptedAt: data.termsAcceptedAt,
           privacyAcceptedAt: data.privacyAcceptedAt,
-          phones: data.phones.map((number) => ({ number })),
+          phones: data.phones,
         });
 
         return await tm.save(student);
@@ -127,7 +131,14 @@ export class StudentRepository implements IStudentRepository {
   async findByEmailWithPassword(email: string): Promise<Student | null> {
     return await this.repository.findOne({
       where: { email, active: true },
-      select: { id: true, email: true, passwordHash: true, active: true },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        active: true,
+        failedLogins: true,
+        blockedUntil: true,
+      },
     });
   }
 
@@ -168,8 +179,12 @@ export class StudentRepository implements IStudentRepository {
         if (phones) {
           await tm.delete(StudentPhone, { studentId });
           await tm.save(
-            phones.map((number) =>
-              tm.create(StudentPhone, { studentId, number }),
+            phones.map((phone) =>
+              tm.create(StudentPhone, {
+                studentId,
+                number: phone.number,
+                isWhatsapp: phone.isWhatsapp,
+              }),
             ),
           );
         }
@@ -256,5 +271,22 @@ export class StudentRepository implements IStudentRepository {
     if (result.affected === 0) {
       throw new AppError("Student not found", 404);
     }
+  }
+
+  // RN-A4
+  async recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void> {
+    await this.repository.update({ id: accountId }, { failedLogins, blockedUntil });
+  }
+
+  // RN-A4
+  async clearLoginFailures(accountId: string): Promise<void> {
+    await this.repository.update(
+      { id: accountId },
+      { failedLogins: 0, blockedUntil: null },
+    );
   }
 }

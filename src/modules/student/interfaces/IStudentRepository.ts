@@ -4,15 +4,29 @@ import { UpdateStudentInput } from "../validators/UpdateStudentValidator";
 // What the repository actually persists on sign-up. The service hashes the
 // password and stamps the consent dates, so the repository never receives a
 // plain-text password (the old type said `password` but carried a hash).
+import {
+  EducationLevel,
+  ProfileVisibility,
+} from "../types/StudentEnums";
+
 export type CreateStudentData = {
   cpf: string;
   name: string;
   email: string;
   passwordHash: string;
   birthDate: string;
-  phones: string[];
+  city: string;
+  educationLevel: EducationLevel;
+  visibility: ProfileVisibility;
+  // RN-C11: cada número carrega a marca de WhatsApp.
+  phones: StudentPhoneData[];
   termsAcceptedAt: Date;
   privacyAcceptedAt: Date;
+};
+
+export type StudentPhoneData = {
+  number: string;
+  isWhatsapp: boolean;
 };
 
 export interface IStudentRepository {
@@ -57,4 +71,13 @@ export interface IStudentRepository {
 
   // RF10 / RNF08: deactivation, never physical deletion
   deactivate(studentId: string): Promise<void>;
+
+  // RN-A4: persiste o contador de falhas e o fim do bloqueio.
+  recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void>;
+
+  clearLoginFailures(accountId: string): Promise<void>;
 }

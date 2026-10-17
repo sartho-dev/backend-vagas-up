@@ -61,8 +61,8 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 |---|------|--------------------|------------|--------|
 | 01 | Fundação: testes e limpeza | RNF01 | — | **Fechada** (CI e lint adiados) |
 | 02 | Admin: base e gestão de admins | RF32, RF34, RN-A7 | 01 | **Fechada** |
-| 03 | Sessão e login conforme RN-A | RN-A3, RN-A4 | 01 | A fazer |
-| 04 | Alinhar o candidato à v4.9 | RF10, RF12, RF13, RN-C1, RN-C2, RN-C9, RN-C10, RN-C11 | 01 | A fazer |
+| 03 | Sessão e login conforme RN-A | RN-A3, RN-A4 | 01 | **Fechada** |
+| 04 | Alinhar o candidato à v4.9 | RF10, RF12, RF13, RN-C1, RN-C2, RN-C9, RN-C10, RN-C11 | 01 | **Fechada** |
 | 05 | Perfil próprio e troca de senha | RF03, RN-A3, RN-A5 | 04 | A fazer |
 | 06 | E-mail e tokens de uso único | RNF01 | 01 | A fazer |
 | 07 | Recuperação de senha e troca de e-mail | RF01, RF03, RN-A6 | 06, 03 | A fazer |
@@ -103,8 +103,8 @@ Além das pendências P4 a P9 do SRS (seção 9.2), o próprio documento tem tr�
 | ID | Questão | Trava | Observação |
 |----|---------|-------|------------|
 | **D1** | **Tabela única de usuários?** A v4.9 (seção 6) unifica todos os perfis numa `USUARIO`, para resolver o e-mail único e dar FK real à sessão. O código tem `students` e `admins` separados, com `EmailRegistry` resolvendo a unicidade e `sessions.account_id` polimórfico (sem FK, contra a RNF06). | 04, 10 | Manter separado custa a FK da sessão; unificar custa migrar os dois módulos existentes. Decidir **antes** da task 10, quando o terceiro perfil entra. |
-| **D2** | **Idade mínima: 14 ou 16?** RN-C1 diz 14. A história de usuário da seção 7 diz "menor de 16 recusado". | 04 | Bloqueia o `CalculatorBirthDate`, em implementação agora. Ligado à pendência P4 do SRS. |
-| **D3** | **O admin vê o CPF completo?** O Anexo A diz `Ver CPF → Admin: Sim`. O RNF03 restringe só a anunciantes. O código hoje **mascara o CPF para o admin**, seguindo a v3.2. | 04, 18, 23 | Se o Anexo A vale, o `maskCpf` sai da listagem do admin e passa a valer para anunciante. |
+| ~~**D2**~~ | ~~Idade mínima: 14 ou 16?~~ **Resolvida em 17/10/2026: 14 anos (RN-C1).** | — | `MIN_AGE_YEARS = 14`. **A história de usuário da seção 7 do SRS ficou desatualizada** ("menor de 16 recusado") e precisa ser corrigida no documento. A P4 (conferência jurídica) segue aberta; mudar é uma linha. |
+| ~~**D3**~~ | ~~O admin vê o CPF completo?~~ **Resolvida em 17/10/2026: sim, Anexo A.** | — | `maskCpf` saiu da listagem do admin. O helper continua e passa a ser a trava do **anunciante** (RNF03) nas tasks 17 e 18; tem teste de unidade para não apodrecer sem uso. |
 
 ---
 
@@ -141,6 +141,12 @@ Além das pendências P4 a P9 do SRS (seção 9.2), o próprio documento tem tr�
 
 # TASK 03: Sessão e login conforme RN-A
 
+> **Status: fechada (14/10/2026).** 10 testes novos.
+>
+> Entregue: teto de sessão corrigido para 8 h, bloqueio da RN-A4 com `failed_logins`/`blocked_until` nas tabelas de conta, `purgeExpired` no repositório de sessões e migration `LoginAttempts`.
+>
+> **Correção de uma armadilha:** `.env` e `.env.example` fixavam `SESSION_MAX_AGE_MS=7200000`, que sobrescrevia o padrão novo. O teste não pegaria, porque o `.env.test` não define a variável — em desenvolvimento e produção a sessão seguiria com teto de 2 h. Mudar o padrão no código não basta quando o `.env` fixa o valor.
+
 ## Contexto
 O módulo auth já faz o essencial — token opaco, sem JWT, só o hash no banco, mensagem única de falha — e isso continua valendo na v4.9. Faltam dois ajustes e um controle novo.
 
@@ -152,7 +158,8 @@ O módulo auth já faz o essencial — token opaco, sem JWT, só o hash no banco
 
 ## Regras
 - O bloqueio da RN-A4 responde **a mesma mensagem** da RN-A1. Informar "conta bloqueada" entrega ao atacante a confirmação de que o e-mail existe, que é justamente o que a RN-A1 evita.
-- O contador é por e-mail, não por IP, e incrementa mesmo quando o e-mail não existe — senão vira oráculo de enumeração.
+- O contador é por e-mail, não por IP. **Ele só existe para contas que existem**: a seção 6 do SRS o guarda como coluna da conta, então não há onde contar tentativas contra um e-mail inexistente. Isso não abre enumeração porque a resposta é a mesma nos dois casos — mas exige o cuidado do item abaixo.
+- **A comparação de senha roda mesmo com a conta bloqueada.** Sair antes dela deixaria a resposta do caso bloqueado visivelmente mais rápida, e a diferença de tempo entregaria que o e-mail existe. É a mesma defesa do hash descartável usado quando o e-mail não existe.
 
 ## Critérios de aceitação
 - 5 falhas e a 6ª tentativa é recusada mesmo com a senha certa; depois de 15 min, a senha certa entra.
@@ -163,6 +170,16 @@ O módulo auth já faz o essencial — token opaco, sem JWT, só o hash no banco
 ---
 
 # TASK 04: Alinhar o candidato à v4.9
+
+> **Status: fechada (17/10/2026).** 21 testes novos; suíte em 40.
+>
+> Entregue: `city`, `education_level` (enum RN-C2), `visibility` (enum RN-C9, padrão oculto), `photo_url`, `resume_url`, `is_whatsapp` por telefone; idade mínima 14; trava de visibilidade pública para menor de 18 nos dois caminhos; allowlist de domínios do currículo; telefone opcional (RF10).
+>
+> **Cuidado que a migration exigiu:** `city` e `education_level` são obrigatórias e a tabela já tinha linhas. O TypeORM gerou `ADD COLUMN ... NOT NULL` sem default, que falha em banco não vazio — e isso **não apareceria nos testes**, porque o banco de teste está sempre vazio. Reescrevi com `DEFAULT` seguido de `DROP DEFAULT` e validei no banco de desenvolvimento, que tinha uma linha.
+>
+> **Dívida registrada:** a trava de visibilidade vive em dois lugares (validator no cadastro, service na edição) porque na edição a data de nascimento precisa vir do banco. Mesma regra, dois caminhos — ambos testados, mas vale lembrar ao mexer num deles.
+>
+> **Não entrou:** `authorize(AccountRole.STUDENT)` no `PATCH /students` continua faltando (RF02). É entrega da task 05, que move a rota para `/students/me`.
 
 ## Contexto
 O módulo `student` foi escrito para a v3.2 e carrega campos que a v4.9 não tem, além de faltarem os que ela introduziu. **Depende das decisões D2 e D3.**

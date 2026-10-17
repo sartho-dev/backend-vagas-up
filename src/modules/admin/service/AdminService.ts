@@ -19,7 +19,6 @@ import { ISessionRevoker } from "../../auth/interfaces/ISessionRevoker";
 import { IPasswordHasher } from "../../../shared/services/PasswordHasher";
 import { IStudentRepository } from "../../student/interfaces/IStudentRepository";
 import { Student } from "../../student/schema/Student.schema";
-import { maskCpf } from "../../../shared/utils/maskCpf";
 
 // RNF01: bcrypt cost 12 minimum, whatever BCRYPT_COST says.
 
@@ -36,14 +35,15 @@ function toAdminResult(admin: Admin): AdminResult {
   };
 }
 
-// RN32: the CPF is masked HERE, in the mapper, so no listing route can ship
-// the raw value by forgetting to call the helper.
+// Anexo A da v4.9: `Ver CPF → Admin: Sim`. O administrador vê o CPF completo
+// — ele precisa dele para a correção prevista no RF32. Quem NUNCA pode ver é
+// o anunciante (RNF03), e essa trava vive no módulo dele (task 18), não aqui.
 function toAdminStudentResult(student: Student): AdminStudentResult {
   return {
     id: student.id,
     name: student.name,
     email: student.email,
-    cpf: maskCpf(student.cpf),
+    cpf: student.cpf,
     active: student.active,
     createdAt: student.createdAt,
   };

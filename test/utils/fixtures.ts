@@ -3,6 +3,10 @@ import { Admin } from "@/modules/admin/schema/Admin.schema";
 import { Student } from "@/modules/student/schema/Student.schema";
 import { StudentPhone } from "@/modules/student/schema/StudentPhone.schema";
 import { IPasswordHasher } from "@/shared/services/PasswordHasher";
+import {
+  EducationLevel,
+  ProfileVisibility,
+} from "@/modules/student/types/StudentEnums";
 
 export const DEFAULT_PASSWORD = "SenhaForte123";
 
@@ -54,12 +58,17 @@ export async function createStudent(
     email: overrides.email ?? `student_${nextSuffix()}@test.local`,
     passwordHash,
     birthDate: overrides.birthDate ?? "2000-01-01",
+    city: overrides.city ?? "Campo Grande",
+    educationLevel:
+      overrides.educationLevel ?? EducationLevel.HIGH_SCHOOL_COMPLETE,
+    visibility: overrides.visibility ?? ProfileVisibility.HIDDEN,
     active: overrides.active ?? true,
     termsAcceptedAt: overrides.termsAcceptedAt ?? new Date(),
     privacyAcceptedAt: overrides.privacyAcceptedAt ?? new Date(),
     phones: (overrides.phoneNumbers ?? ["67999999999"]).map((number) => {
       const p = new StudentPhone();
       p.number = number;
+      p.isWhatsapp = false;
       return p;
     }),
   });
