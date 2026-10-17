@@ -289,4 +289,17 @@ export class StudentRepository implements IStudentRepository {
       { failedLogins: 0, blockedUntil: null },
     );
   }
+
+  // RF03: mesmo desenho do findByEmailWithPassword — o hash tem `select:
+  // false` no schema, então só vem quando pedido explicitamente.
+  async findByIdWithPassword(id: string): Promise<Student | null> {
+    return await this.repository.findOne({
+      where: { id, active: true },
+      select: { id: true, passwordHash: true, active: true },
+    });
+  }
+
+  async updatePassword(studentId: string, passwordHash: string): Promise<void> {
+    await this.repository.update({ id: studentId }, { passwordHash });
+  }
 }

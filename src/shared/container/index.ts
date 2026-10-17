@@ -62,6 +62,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     studentRepository,
     emailRegistry,
     hasher,
+    authService,
   );
   const studentController = new StudentController(studentService);
 

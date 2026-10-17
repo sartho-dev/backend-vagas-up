@@ -47,7 +47,7 @@ docker exec -it api_estagio_vagas env \
   npm run seed:admin
 ```
 
-A senha segue a RN25 (10 a 64 caracteres, limite de 72 bytes do bcrypt).
+A senha segue a RN-A5 (10 a 64 caracteres, limite de 72 bytes do bcrypt).
 
 ---
 
@@ -57,10 +57,18 @@ A senha segue a RN25 (10 a 64 caracteres, limite de 72 bytes do bcrypt).
 |---|---|
 | `/api/v1/auth` | público (login) |
 | `POST /api/v1/students` | público (cadastro) |
-| `PATCH /api/v1/students` | autenticado |
+| `/api/v1/students/me/*` | candidatos apenas |
 | `/api/v1/admin/*` | administradores apenas |
 
-> `PATCH /api/v1/students` hoje só tem `authenticate`, sem `authorize(STUDENT)` — um token de admin alcança o service. Pendência conhecida da TASK 03.
+Rotas do próprio perfil:
+
+| rota | o que faz |
+|---|---|
+| `GET /api/v1/students/me` | perfil próprio, **com CPF completo** (Anexo A) |
+| `PATCH /api/v1/students/me` | nome, telefones, cidade, escolaridade, visibilidade, perfil profissional |
+| `PATCH /api/v1/students/me/password` | troca de senha; exige a atual e **encerra todas as sessões** (RN-A3) |
+
+Trocar o e-mail **não** passa por aqui: o RF03 exige confirmação por link no novo endereço, e isso é a task 07.
 
 ### Autenticação
 
@@ -146,7 +154,7 @@ src/
 
 Convenções:
 
-- **Código em inglês, mensagens de erro em português** — o usuário final é brasileiro, e a RN23 exige a string exata `"E-mail ou senha inválidos"`.
+- **Código em inglês, mensagens de erro em português** — o usuário final é brasileiro, e a RN-A1 exige a string exata `"E-mail ou senha inválidos"`.
 - Senhas com bcrypt, custo mínimo 12 (RNF01), centralizado no `PasswordHasher`.
 - Chaves primárias UUID; CPF e CNPJ são únicos, nunca chave.
 - Desativação lógica (`active = false`), nunca exclusão física (RNF06).

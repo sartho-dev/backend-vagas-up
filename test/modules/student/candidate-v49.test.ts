@@ -183,7 +183,7 @@ describe("RN-C9 — mudança de visibilidade depois do cadastro", () => {
     );
 
     const res = await ctx.request
-      .patch("/api/v1/students")
+      .patch("/api/v1/students/me")
       .set(authHeader(token))
       .send({ visibility: ProfileVisibility.PUBLIC });
 
@@ -195,7 +195,7 @@ describe("RN-C9 — mudança de visibilidade depois do cadastro", () => {
     const { token } = await studentLoggedIn(birthDateForAge(16));
 
     const res = await ctx.request
-      .patch("/api/v1/students")
+      .patch("/api/v1/students/me")
       .set(authHeader(token))
       .send({ visibility: ProfileVisibility.PUBLIC });
 
@@ -206,7 +206,7 @@ describe("RN-C9 — mudança de visibilidade depois do cadastro", () => {
     const { token } = await studentLoggedIn(birthDateForAge(16));
 
     const res = await ctx.request
-      .patch("/api/v1/students")
+      .patch("/api/v1/students/me")
       .set(authHeader(token))
       .send({ visibility: ProfileVisibility.VERIFIED_ONLY });
 

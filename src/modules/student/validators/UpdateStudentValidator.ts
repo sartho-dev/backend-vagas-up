@@ -12,6 +12,7 @@ import {
   resumeUrlSchema,
 } from "./CreateStudentValidator";
 import { LanguageLevel } from "../schema/StudentLanguage.schema";
+import { passwordSchema } from "../../../shared/validators/passwordSchema";
 
 // ============================================================================
 // Language sub-schemas (RF04)
@@ -160,7 +161,10 @@ export const updateStudentSchema = z
   .object({
     // --- Basic fields ---
     name: nameSchema.optional(),
-    email: emailSchema.optional(),
+    // RF03: trocar o e-mail exige confirmação por link no NOVO endereço, e
+    // isso é a task 07. Até lá o campo não é aceito aqui — aceitar sem
+    // confirmar deixaria alguém tomar a conta trocando o e-mail de um
+    // navegador esquecido aberto.
     phones: phonesSchema.optional(),
     city: citySchema.optional(),
     educationLevel: educationLevelSchema.optional(),
@@ -190,3 +194,24 @@ export const updateStudentSchema = z
   });
 
 export type UpdateStudentInput = z.infer<typeof updateStudentSchema>;
+
+// ============================================================================
+// RF03 / RN-A5 — troca da própria senha
+// ============================================================================
+//
+// Rota separada da edição de perfil de propósito: trocar a senha encerra
+// todas as sessões (RN-A3), e misturar isso com "mudei minha cidade" torna
+// o efeito colateral invisível para quem chama.
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "A senha atual é obrigatória"),
+    newPassword: passwordSchema,
+  })
+  .strict()
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    path: ["newPassword"],
+    message: "A nova senha deve ser diferente da atual",
+  });
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
