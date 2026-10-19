@@ -58,6 +58,7 @@ A senha segue a RN-A5 (10 a 64 caracteres, limite de 72 bytes do bcrypt).
 | `/api/v1/auth` | público (login) |
 | `POST /api/v1/students` | público (cadastro) |
 | `/api/v1/students/me/*` | candidatos apenas |
+| `GET /api/v1/courses` | público (lista de cursos) |
 | `/api/v1/admin/*` | administradores apenas |
 
 Rotas do próprio perfil:

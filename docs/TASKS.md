@@ -66,7 +66,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 05 | Perfil próprio e troca de senha | RF03, RN-A3, RN-A5 | 04 | **Fechada** |
 | 06 | E-mail e tokens de uso único | RNF01 | 01 | **Fechada** |
 | 07 | Recuperação de senha e troca de e-mail | RF01, RF03, RN-A6 | 06, 03 | **Fechada** |
-| 08 | Cursos | RF33 | 02 | A fazer |
+| 08 | Cursos | RF33 | 02 | **Fechada** |
 | 09 | Formações do candidato | RF11, RN-C2, RN-C4 | 04, 08 | A fazer |
 | 10 | Anunciante e responsável | RF20, RF22, RF23, RN-VG8 | 06, 07 | A fazer |
 | 11 | Verificação de anunciantes | RF21, RF30, RN-V1 a RN-V5 | 10 | A fazer |
@@ -302,13 +302,23 @@ Recuperação de senha, convite de responsável e troca de e-mail dependem de en
 
 # TASK 08: Cursos
 
+> **Status: fechada (17/10/2026).** 18 testes novos; suíte em 114.
+>
+> Entregue: tabela `courses`, CRUD do administrador sob `/api/v1/admin/courses`, leitura pública em `GET /api/v1/courses`, e o gancho `hasLinks` isolado no repositório.
+>
+> **Sem coluna `ativo`.** A v4.9 reduziu a entidade a id e nome, e a RF33 manda **excluir** curso sem uso, não desativar. A RNF06 continua valendo para o caso oposto: curso com vínculo não sai de jeito nenhum.
+>
+> **A exclusão roda em transação com lock.** Sem travar a linha, um vínculo criado entre a checagem e o `DELETE` deixaria uma formação apontando para um curso que sumiu. Por isso o `hasLinks` recebe o `EntityManager` — rodar fora da transação do delete tornaria a trava inútil.
+>
+> **Um critério de aceitação não pôde ser testado pela API:** "curso com formação vinculada não é excluído". As tabelas `formations` e `vacancies` ainda não existem, então `hasLinks` devolve `false` e esse caminho não roda. Travei o contrato no nível do service, com repositório falso (`course-has-links.test.ts`), para que a task 09 só precise ligar a consulta — o tratamento do 409 já está garantido e testado.
+
 ## Entregas (RF33)
 - Tabela `courses`: `id`, `nome` UK.
 - CRUD pelo admin; curso **sem uso** pode ser excluído, com uso não.
 - `GET` liberado para visitante, candidato, responsável e admin — formações (task 09) e vagas (task 13) precisam da lista.
 
 ## Regras
-- `hasLinks(id)` isolado no repositório. Hoje retorna `false`; a task 09 passa a consultar `formations` e a 13, `vacancies`.
+- `hasLinks(id)` isolado no repositório. Hoje retorna `false`; a task 09 passa a consultar `formations` e a 13, `vacancies`. **O método é privado e recebe o `EntityManager`** (`hasLinksWith`), justamente para rodar dentro da transação do delete — ao ligar a consulta, use o manager recebido, não `this.repository`.
 - Nome repetido é recusado (constraint no banco).
 
 ## Critérios de aceitação

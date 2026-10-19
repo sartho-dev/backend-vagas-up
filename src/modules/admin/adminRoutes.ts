@@ -13,6 +13,7 @@ export function adminRoutes(container: Container): Router {
   router.use(container.authenticate, authorize(AccountRole.ADMIN));
 
   const admins = container.adminController;
+  const courses = container.courseController;
 
   // RF21: manage administrators
   router.post("/administrators", admins.createController.bind(admins));
@@ -35,6 +36,12 @@ export function adminRoutes(container: Container): Router {
     "/administrators/:id/reactivate",
     admins.reactivateController.bind(admins),
   );
+
+  // RF33: manutenção de cursos. A leitura é pública e fica em
+  // `courseRoutes`; aqui só o que exige administrador.
+  router.post("/courses", courses.createController.bind(courses));
+  router.patch("/courses/:id", courses.renameController.bind(courses));
+  router.delete("/courses/:id", courses.deleteController.bind(courses));
 
   return router;
   // Subtask 2 onwards: admin management, student accounts, CPF correction.
