@@ -7,7 +7,9 @@ const TABLES = [
   "single_use_tokens",
   "sessions",
   "admins",
+  "formations",
   "students",
+  "courses",
 ] as const;
 
 export async function truncateAll(): Promise<void> {

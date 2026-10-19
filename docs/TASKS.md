@@ -66,8 +66,9 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 05 | Perfil próprio e troca de senha | RF03, RN-A3, RN-A5 | 04 | **Fechada** |
 | 06 | E-mail e tokens de uso único | RNF01 | 01 | **Fechada** |
 | 07 | Recuperação de senha e troca de e-mail | RF01, RF03, RN-A6 | 06, 03 | **Fechada** |
-| 08 | Cursos | RF33 | 02 | A fazer |
-| 09 | Formações do candidato | RF11, RN-C2, RN-C4 | 04, 08 | A fazer |
+| 08 | Cursos | RF33 | 02 | **Fechada** |
+| 09 | Formações do candidato | RF11, RN-C2, RN-C4 | 04, 08 | **Fechada** |
+| S1 | Swagger gerado do Zod | — | 09 | **Fechada** |
 | 10 | Anunciante e responsável | RF20, RF22, RF23, RN-VG8 | 06, 07 | A fazer |
 | 11 | Verificação de anunciantes | RF21, RF30, RN-V1 a RN-V5 | 10 | A fazer |
 | 12 | Preço de vagas e configuração | RF39, RF40, RN-P8 | 02 | A fazer |
@@ -302,13 +303,23 @@ Recuperação de senha, convite de responsável e troca de e-mail dependem de en
 
 # TASK 08: Cursos
 
+> **Status: fechada (17/10/2026).** 18 testes novos; suíte em 114.
+>
+> Entregue: tabela `courses`, CRUD do administrador sob `/api/v1/admin/courses`, leitura pública em `GET /api/v1/courses`, e o gancho `hasLinks` isolado no repositório.
+>
+> **Sem coluna `ativo`.** A v4.9 reduziu a entidade a id e nome, e a RF33 manda **excluir** curso sem uso, não desativar. A RNF06 continua valendo para o caso oposto: curso com vínculo não sai de jeito nenhum.
+>
+> **A exclusão roda em transação com lock.** Sem travar a linha, um vínculo criado entre a checagem e o `DELETE` deixaria uma formação apontando para um curso que sumiu. Por isso o `hasLinks` recebe o `EntityManager` — rodar fora da transação do delete tornaria a trava inútil.
+>
+> **Um critério de aceitação não pôde ser testado pela API:** "curso com formação vinculada não é excluído". As tabelas `formations` e `vacancies` ainda não existem, então `hasLinks` devolve `false` e esse caminho não roda. Travei o contrato no nível do service, com repositório falso (`course-has-links.test.ts`), para que a task 09 só precise ligar a consulta — o tratamento do 409 já está garantido e testado.
+
 ## Entregas (RF33)
 - Tabela `courses`: `id`, `nome` UK.
 - CRUD pelo admin; curso **sem uso** pode ser excluído, com uso não.
 - `GET` liberado para visitante, candidato, responsável e admin — formações (task 09) e vagas (task 13) precisam da lista.
 
 ## Regras
-- `hasLinks(id)` isolado no repositório. Hoje retorna `false`; a task 09 passa a consultar `formations` e a 13, `vacancies`.
+- `hasLinks(id)` isolado no repositório. Hoje retorna `false`; a task 09 passa a consultar `formations` e a 13, `vacancies`. **O método é privado e recebe o `EntityManager`** (`hasLinksWith`), justamente para rodar dentro da transação do delete — ao ligar a consulta, use o manager recebido, não `this.repository`.
 - Nome repetido é recusado (constraint no banco).
 
 ## Critérios de aceitação
@@ -317,6 +328,16 @@ Recuperação de senha, convite de responsável e troca de e-mail dependem de en
 ---
 
 # TASK 09: Formações do candidato
+
+> **Status: fechada (18/10/2026).** 19 testes novos; suíte em 133.
+>
+> Entregue: tabela `formations`, CRUD do próprio candidato sob `/students/me/formations`, as duas regras de data, e o `hasInProgress` que a RN-C4 vai usar na task 16.
+>
+> **Fecha uma pendência da task 08:** o `hasLinks` dos cursos agora consulta `formations`, e o critério "curso com formação vinculada não é excluído" ganhou teste de ponta a ponta (`course-in-use.test.ts`). A FK usa `ON DELETE RESTRICT`, então o banco também recusa — a regra está em dois níveis.
+>
+> **Desvio de um critério de aceitação, de propósito.** O plano dizia "formação de outro candidato: 403"; ficou **404**. As rotas vivem sob `/me` e a posse é filtro de banco (`WHERE student_id = :sessão`), então a formação alheia não existe nesse escopo. Um 403 confirmaria que aquele id existe em algum lugar — 404 não vaza nada e é o que a consulta naturalmente produz.
+>
+> **A edição parcial revalida o registro inteiro.** Mudar só `status` para "em andamento" deixaria uma data de fim antiga para trás, e aí a formação passaria a valer para a RN-C4 (vaga de estágio) sem corresponder à realidade. O service mescla o que veio com o que está gravado e revalida as duas regras de data. Tem teste.
 
 ## Entregas (RF11)
 - Tabela `formations`: `candidato_id` FK, `nivel` (enum da RN-C2), `curso_id` FK opcional, `instituicao` (texto livre — a v4.0 removeu a entidade), `situacao` (`em andamento | concluída | trancada`), `inicio`, `fim?`.
@@ -331,6 +352,24 @@ Recuperação de senha, convite de responsável e troca de e-mail dependem de en
 - Candidato sem formação se cadastra normalmente.
 - `fim` anterior a `inicio` recusado.
 - Formação de outro candidato: 403.
+
+---
+
+# TASK S1: Swagger gerado do Zod
+
+> **Status: fechada (18/10/2026).** Task intercalada, fora da numeração original. 5 testes novos; suíte em 138.
+>
+> **Motivo de ter sido feita agora:** eram 17 rotas e **zero** documentadas — o `/api-docs` servia uma API vazia. A definição de pronto deste plano exige "rotas novas no Swagger" desde a task 01, e nove tasks passaram sem cumprir, porque nada cobrava. Com 24 rotas ainda dá para documentar numa sessão; depois das vagas e candidaturas seriam perto de 60.
+>
+> **Entregas**
+> - `components.ts` gera os corpos de requisição dos **mesmos schemas Zod** que validam (`z.toJSONSchema`, alvo `openapi-3.0`). O Zod 4 faz isso nativamente — nenhuma dependência nova.
+> - Respostas de erro declaradas uma vez (`components.responses`) e referenciadas por todas as rotas.
+> - As 24 rotas anotadas, com as regras de negócio relevantes na descrição (por que o login responde igual para e-mail inexistente, por que a formação alheia dá 404 e não 403, por que o CPF aparece para o admin).
+> - `bearerFormat: "opaque"` com teste garantindo que ninguém troque por `JWT` — isso faria ferramentas tentarem decodificar um token que não carrega nada.
+>
+> **A trava que faz a diferença:** `swagger-coverage.test.ts` conta as rotas registradas no Express e compara com as operações documentadas. Verificado em cima: adicionar uma rota sem doc derruba a suíte (`expected 24 to be 25`). Sem isso, a documentação voltaria a ficar para trás na terceira task.
+>
+> **Limitação:** o teste não diz QUAL rota ficou de fora. O Express 5 guarda o prefixo de montagem numa closure, sem forma estável de lê-lo. A contagem mais o diff do commit resolvem na prática.
 
 ---
 
