@@ -127,6 +127,18 @@ O envio passa por `IEmailSender`. Sem `SMTP_HOST` e `SMTP_USER` configurados, o 
 
 ---
 
+## Documentação da API
+
+O Swagger fica em http://localhost:3001/api-docs e cobre as 24 rotas.
+
+**Os corpos de requisição são gerados dos mesmos schemas Zod que validam**, via `z.toJSONSchema` (Zod 4, alvo `openapi-3.0`), registrados em [`src/shared/docs/components.ts`](src/shared/docs/components.ts). Documentação escrita à mão mente em silêncio — alguém muda o validator, o comentário fica para trás, e o front confia no que está errado. Gerando da mesma fonte, a divergência deixa de ser possível.
+
+O que o Zod não sabe — caminho, método, respostas de erro, quem precisa de token — fica em anotações `@swagger` junto de cada rota.
+
+**Rota nova sem documentação quebra a suíte.** O teste `test/shared/swagger-coverage.test.ts` conta as rotas registradas no Express e compara com as operações documentadas. Ele não aponta qual ficou de fora (o Express 5 não expõe o prefixo de montagem de forma estável), mas falha com a contagem e o diff do commit mostra na hora.
+
+---
+
 ## Testes
 
 Os testes usam um Postgres próprio, na porta **5435**, isolado do banco de desenvolvimento. Um `.env.test` separado garante isso, e o setup aborta se `DB_DATABASE` não for `estagia_mais_test`.

@@ -68,6 +68,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 07 | Recuperação de senha e troca de e-mail | RF01, RF03, RN-A6 | 06, 03 | **Fechada** |
 | 08 | Cursos | RF33 | 02 | **Fechada** |
 | 09 | Formações do candidato | RF11, RN-C2, RN-C4 | 04, 08 | **Fechada** |
+| S1 | Swagger gerado do Zod | — | 09 | **Fechada** |
 | 10 | Anunciante e responsável | RF20, RF22, RF23, RN-VG8 | 06, 07 | A fazer |
 | 11 | Verificação de anunciantes | RF21, RF30, RN-V1 a RN-V5 | 10 | A fazer |
 | 12 | Preço de vagas e configuração | RF39, RF40, RN-P8 | 02 | A fazer |
@@ -351,6 +352,24 @@ Recuperação de senha, convite de responsável e troca de e-mail dependem de en
 - Candidato sem formação se cadastra normalmente.
 - `fim` anterior a `inicio` recusado.
 - Formação de outro candidato: 403.
+
+---
+
+# TASK S1: Swagger gerado do Zod
+
+> **Status: fechada (18/10/2026).** Task intercalada, fora da numeração original. 5 testes novos; suíte em 138.
+>
+> **Motivo de ter sido feita agora:** eram 17 rotas e **zero** documentadas — o `/api-docs` servia uma API vazia. A definição de pronto deste plano exige "rotas novas no Swagger" desde a task 01, e nove tasks passaram sem cumprir, porque nada cobrava. Com 24 rotas ainda dá para documentar numa sessão; depois das vagas e candidaturas seriam perto de 60.
+>
+> **Entregas**
+> - `components.ts` gera os corpos de requisição dos **mesmos schemas Zod** que validam (`z.toJSONSchema`, alvo `openapi-3.0`). O Zod 4 faz isso nativamente — nenhuma dependência nova.
+> - Respostas de erro declaradas uma vez (`components.responses`) e referenciadas por todas as rotas.
+> - As 24 rotas anotadas, com as regras de negócio relevantes na descrição (por que o login responde igual para e-mail inexistente, por que a formação alheia dá 404 e não 403, por que o CPF aparece para o admin).
+> - `bearerFormat: "opaque"` com teste garantindo que ninguém troque por `JWT` — isso faria ferramentas tentarem decodificar um token que não carrega nada.
+>
+> **A trava que faz a diferença:** `swagger-coverage.test.ts` conta as rotas registradas no Express e compara com as operações documentadas. Verificado em cima: adicionar uma rota sem doc derruba a suíte (`expected 24 to be 25`). Sem isso, a documentação voltaria a ficar para trás na terceira task.
+>
+> **Limitação:** o teste não diz QUAL rota ficou de fora. O Express 5 guarda o prefixo de montagem numa closure, sem forma estável de lê-lo. A contagem mais o diff do commit resolvem na prática.
 
 ---
 
