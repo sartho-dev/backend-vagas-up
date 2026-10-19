@@ -4,6 +4,7 @@ import path from "path";
 import { config } from "../config";
 
 import { Admin } from "../../modules/admin/schema/Admin.schema";
+import { Course } from "../../modules/course/schema/Course.schema";
 import { Session } from "../../modules/auth/schema/Session.schema";
 import { SingleUseToken } from "../../modules/auth/schema/SingleUseToken.schema";
 import { Student } from "../../modules/student/schema/Student.schema";
@@ -20,6 +21,7 @@ import { Init1791845311089 } from "./migrations/1791845311089-Init";
 import { LoginAttempts1792085200837 } from "./migrations/1792085200837-LoginAttempts";
 import { CandidateProfileV491792257488337 } from "./migrations/1792257488337-CandidateProfileV49";
 import { SingleUseTokens1792270518043 } from "./migrations/1792270518043-SingleUseTokens";
+import { Courses1792413012797 } from "./migrations/1792413012797-Courses";
 
 // Define a pasta base dependendo do ambiente
 const baseDir = path.join(__dirname, "../../");
@@ -36,6 +38,7 @@ export const AppDataSource = new DataSource({
   // Usa o path.join para garantir que ele ache os arquivos, não importa a subpasta
   entities: [
     Admin,
+    Course,
     Session,
     SingleUseToken,
     Student,
@@ -56,6 +59,7 @@ export const AppDataSource = new DataSource({
     LoginAttempts1792085200837,
     CandidateProfileV491792257488337,
     SingleUseTokens1792270518043,
+    Courses1792413012797,
   ],
 
   // Isso força o SSL necessário para o Google Cloud SQL

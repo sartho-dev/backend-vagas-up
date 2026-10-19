@@ -8,6 +8,7 @@ const TABLES = [
   "sessions",
   "admins",
   "students",
+  "courses",
 ] as const;
 
 export async function truncateAll(): Promise<void> {
