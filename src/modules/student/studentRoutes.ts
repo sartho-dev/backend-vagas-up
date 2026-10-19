@@ -6,6 +6,7 @@ import { AccountRole } from "../auth/types/AccountRole";
 export function studentRoutes(container: Container): Router {
   const router = Router();
   const students = container.studentController;
+  const formations = container.formationController;
 
   // RF10: cadastro é público.
   router.post("/", students.createController.bind(students));
@@ -20,6 +21,14 @@ export function studentRoutes(container: Container): Router {
   me.get("/", students.getOwnProfileController.bind(students));
   me.patch("/", students.updateOwnProfileController.bind(students));
   me.patch("/password", students.changePasswordController.bind(students));
+
+  // RF11: formações do próprio candidato. Ficam sob /me de propósito — o
+  // dono vem da sessão, então não existe caminho para alcançar a formação
+  // de outra pessoa.
+  me.get("/formations", formations.listController.bind(formations));
+  me.post("/formations", formations.createController.bind(formations));
+  me.patch("/formations/:id", formations.updateController.bind(formations));
+  me.delete("/formations/:id", formations.deleteController.bind(formations));
 
   router.use("/me", me);
 

@@ -1,5 +1,6 @@
 import { EntityManager, Repository } from "typeorm";
 import { Course } from "../schema/Course.schema";
+import { Formation } from "../../formation/schema/Formation.schema";
 import { ICourseRepository } from "../interfaces/ICourseRepository";
 import { DeleteCourseOutcome } from "../types/CourseTypes";
 import { AppError } from "../../../shared/errors/AppError";
@@ -66,16 +67,17 @@ export class CourseRepository implements ICourseRepository {
     return await this.hasLinksWith(this.repository.manager, id);
   }
 
-  // TASK 09: passa a consultar `formations` (RF11).
-  // TASK 13: passa a consultar `vacancies` (RF24).
+  // RF33: curso em uso não pode ser excluído.
   //
-  // Enquanto essas tabelas não existem, não há vínculo possível. O método
-  // recebe o EntityManager para rodar DENTRO da transação do delete quando
-  // chamado por ele — senão a trava da linha não protegeria nada.
+  // Recebe o EntityManager para rodar DENTRO da transação do delete — fora
+  // dela a trava da linha não protegeria nada, e um vínculo criado no
+  // intervalo passaria despercebido.
+  //
+  // TASK 13: somar aqui a consulta a `vacancies` (RF24).
   private async hasLinksWith(
-    _manager: EntityManager,
-    _id: string,
+    manager: EntityManager,
+    id: string,
   ): Promise<boolean> {
-    return false;
+    return await manager.exists(Formation, { where: { courseId: id } });
   }
 }

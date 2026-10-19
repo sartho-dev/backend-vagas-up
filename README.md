@@ -68,6 +68,10 @@ Rotas do próprio perfil:
 | `GET /api/v1/students/me` | perfil próprio, **com CPF completo** (Anexo A) |
 | `PATCH /api/v1/students/me` | nome, telefones, cidade, escolaridade, visibilidade, perfil profissional |
 | `PATCH /api/v1/students/me/password` | troca de senha; exige a atual e **encerra todas as sessões** (RN-A3) |
+| `GET/POST /api/v1/students/me/formations` | formações do candidato (RF11) |
+| `PATCH/DELETE /api/v1/students/me/formations/:id` | edita ou remove uma formação |
+
+As formações ficam sob `/me` de propósito: o dono vem da sessão, então **não existe caminho para alcançar a formação de outra pessoa**. A posse é filtro de banco (`WHERE student_id = :sessão`), não checagem no service — e por isso a formação alheia responde 404, não 403: dentro do escopo `/me` ela não existe, e um 403 confirmaria que aquele id existe em algum lugar.
 
 Trocar o e-mail **não** passa pelo perfil: tem fluxo próprio, com confirmação.
 
