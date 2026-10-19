@@ -25,7 +25,7 @@ export class App {
     const corsOptions = {
       origin: [
         "http://localhost:5173", // URL padrão do Vite/React
-        // Adicione as URLs do seu frontend de vagas aqui futuramente
+        // Adicionar as URLs do frontend de vagas aqui futuramente
       ],
       methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"],
       credentials: true,

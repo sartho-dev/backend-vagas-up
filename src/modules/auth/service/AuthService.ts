@@ -1,11 +1,15 @@
-import bcrypt from "bcrypt";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { AppError } from "../../../shared/errors/AppError";
-import { IAuthAccountProvider } from "../interfaces/IAuthAccountProvider";
+import { hashToken } from "../../../shared/utils/hashToken";
+import {
+  IAuthAccountProvider,
+  LoginAccount,
+} from "../interfaces/IAuthAccountProvider";
 import { ISessionRepository } from "../interfaces/ISessionRepository";
 import { AccountRole, AuthContext } from "../types/AccountRole";
 import { LoginInput } from "../validators/LoginValidator";
 import { config } from "../../../shared/config";
+import { IPasswordHasher } from "../../../shared/services/PasswordHasher";
 
 export type LoginResult = {
   token: string;
@@ -14,12 +18,10 @@ export type LoginResult = {
   idleTimeoutMinutes: number;
 };
 
-const INVALID_CREDENTIALS = "Invalid email or password";
+// RN23: mensagem unica para e-mail inexistente, senha errada e conta
+// inativa. Qualquer variacao aqui vira um oraculo de enumeracao de contas.
+const INVALID_CREDENTIALS = "E-mail ou senha inválidos";
 const INVALID_SESSION = "Invalid or expired session";
-
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
 
 export class AuthService {
   private providersByRole: Map<AccountRole, IAuthAccountProvider>;
@@ -29,17 +31,11 @@ export class AuthService {
   constructor(
     private providers: IAuthAccountProvider[],
     private sessions: ISessionRepository,
+    private hasher: IPasswordHasher,
     private now: () => Date = () => new Date(),
   ) {
     this.providersByRole = new Map(providers.map((p) => [p.role, p]));
-    this.dummyHash = bcrypt.hash(
-      randomBytes(16).toString("hex"),
-      config.bcryptCost,
-    );
-    console.log(
-      "[AuthService] constructor rodou em: ",
-      new Date().toISOString(),
-    );
+    this.dummyHash = this.hasher.hash(randomBytes(16).toString("hex"));
   }
 
   // RF01
@@ -49,11 +45,8 @@ export class AuthService {
 
     const emailUser = input.email;
 
-    let found: {
-      provider: IAuthAccountProvider;
-      id: string;
-      passwordHash: string;
-    } | null = null;
+    let found: ({ provider: IAuthAccountProvider } & LoginAccount) | null =
+      null;
 
     for (const provider of this.providers) {
       const account = await provider.findForLogin(emailUser);
@@ -63,12 +56,47 @@ export class AuthService {
       }
     }
 
+    const now = this.now();
+
+    // RN-A4: uma conta bloqueada responde como credencial inválida. A
+    // comparação de senha roda mesmo assim: sair antes dela tornaria a
+    // resposta visivelmente mais rápida e denunciaria que o e-mail existe,
+    // que é justamente o que a RN-A1 evita.
+    const blocked =
+      found?.blockedUntil != null &&
+      found.blockedUntil.getTime() > now.getTime();
+
     const hashToCompare = found ? found.passwordHash : await this.dummyHash;
-    const passwordMatches = await bcrypt.compare(input.password, hashToCompare);
+    const passwordMatches = await this.hasher.verify(
+      input.password,
+      hashToCompare,
+    );
+
+    if (blocked) {
+      throw new AppError(INVALID_CREDENTIALS, 401);
+    }
 
     // Same message for unknown email, wrong password and inactive account.
     if (!found || !passwordMatches) {
+      if (found) {
+        const failures = found.failedLogins + 1;
+        const reached = failures >= config.loginMaxAttempts;
+
+        // Ao bloquear, o contador volta a zero: terminado o bloqueio, a conta
+        // recebe um ciclo novo e completo de tentativas.
+        await found.provider.recordLoginFailure(
+          found.id,
+          reached ? 0 : failures,
+          reached ? new Date(now.getTime() + config.loginBlockMs) : null,
+        );
+      }
+
       throw new AppError(INVALID_CREDENTIALS, 401);
+    }
+
+    // RN-A4: login bem-sucedido zera o contador.
+    if (found.failedLogins > 0 || found.blockedUntil) {
+      await found.provider.clearLoginFailures(found.id);
     }
 
     // 256 random bits; only the hash is stored.
@@ -79,7 +107,7 @@ export class AuthService {
       accountType: found.provider.role,
       accountId: found.id,
       tokenHash,
-      now: this.now(),
+      now,
     });
 
     return {
@@ -94,10 +122,7 @@ export class AuthService {
   // protected request.
   async authenticate(token: string): Promise<AuthContext> {
     const now = this.now();
-    console.log("\n this.now()>", now);
     const session = await this.sessions.findByTokenHash(hashToken(token));
-
-    console.log("\n sessão>", session);
 
     if (!session || session.revokedAt) {
       throw new AppError(INVALID_SESSION, 401);

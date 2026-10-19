@@ -3,17 +3,20 @@
     "target": "es2016",
     "module": "commonjs",
     "lib": ["es2016"],
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "./dist",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "strictPropertyInitialization": false,
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": ["node", "vitest/globals"],
     "resolveJsonModule": true,
     "declaration": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+"include": ["src/**/*", "test/**/*", "vitest.config.mts"],
+  "exclude": ["node_modules", "dist"]
 }

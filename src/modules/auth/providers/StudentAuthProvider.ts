@@ -16,11 +16,40 @@ export class StudentAuthProvider implements IAuthAccountProvider {
     const student = await this.students.findByEmailWithPassword(email);
 
     return student
-      ? { id: student.id, passwordHash: student.passwordHash }
+      ? {
+          id: student.id,
+          passwordHash: student.passwordHash,
+          failedLogins: student.failedLogins,
+          blockedUntil: student.blockedUntil,
+        }
       : null;
   }
 
   async isActive(accountId: string): Promise<boolean> {
     return await this.students.existsActiveById(accountId);
+  }
+
+  // RN-A4
+  async recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void> {
+    await this.students.recordLoginFailure(accountId, failedLogins, blockedUntil);
+  }
+
+  // RN-A4
+  async clearLoginFailures(accountId: string): Promise<void> {
+    await this.students.clearLoginFailures(accountId);
+  }
+
+  // RN-A6
+  async updatePassword(accountId: string, passwordHash: string): Promise<void> {
+    await this.students.updatePassword(accountId, passwordHash);
+  }
+
+  // RF03
+  async updateEmail(accountId: string, email: string): Promise<void> {
+    await this.students.updateEmail(accountId, email);
   }
 }

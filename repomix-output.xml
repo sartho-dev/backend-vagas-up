@@ -1,10 +1,10 @@
-This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
 
 <file_summary>
 This section contains a summary of this file.
 
 <purpose>
-This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+This file contains a packed representation of the entire repository's contents.
 It is designed to be easily consumable by AI systems for analysis, code review,
 or other automated processes.
 </purpose>
@@ -32,7 +32,6 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Only files matching these patterns are included: src/modules/**/*.ts
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -41,813 +40,506 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
-src/
-  modules/
-    student/
-      controller/
-        StudentController.ts
-      interfaces/
-        IStudentRepository.ts
-      repository/
-        StudentRepository.ts
-      schema/
-        Student.schema.ts
-        StudentExperience.schema.ts
-        StudentLanguage.schema.ts
-        StudentPhone.schema.ts
-      service/
-        StudentService.ts
-      validators/
-        CreateStudentValidator.ts
-        UpdateStudentValidator.ts
-      studentRoutes.ts
+modules/
+  admin/
+    deactivate-revokes.test.ts
+    last-active-race.test.ts
+  auth/
+    account-enumeration.test.ts
+    single-session.test.ts
+  student/
+    cpf-masked.test.ts
+setup/
+  env.ts
+  global-setup.ts
+  migrate.ts
+  truncate.ts
+utils/
+  app.ts
+  FakePasswordHasher.ts
+  fixtures.ts
+  TestEmailSender.ts
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/modules/student/controller/StudentController.ts">
-import { StudentService } from "../service/StudentService";
-import { Response, Request } from "express";
-import { createStudentSchema } from "../validators/CreateStudentValidator";
+<file path="modules/admin/deactivate-revokes.test.ts">
+// POR QUE EXISTE: RN21 diz que desativar uma conta encerra TODAS as sessões
+// dela. Sem `revokeAllSessions`, o admin desativado continuaria acessando
+// até o idle timeout — o que na prática significa até 30 minutos de acesso
+// indevido. Esse teste trava a garantia.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import {
-  ApiResponse,
-  CreateStudentResponse,
-} from "../../../shared/types/ApiResponse";
-import { asyncHandler } from "../../../shared/middleware/asyncHandler";
+  createTestContext,
+  TestContext,
+  loginAs,
+  authHeader,
+} from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
 
-export class StudentController {
-  constructor(private studentService: StudentService) {}
+let ctx: TestContext;
 
-  createController = asyncHandler(async (req: Request, res: Response) => {
-    const data = createStudentSchema.parse(req.body);
-    const student = await this.studentService.createService(data);
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
 
-    const response: ApiResponse<CreateStudentResponse> = {
-      status: "success",
-      data: student,
-    };
+beforeEach(async () => {
+  await truncateAll();
+});
 
-    res.status(201).json(response);
-  });
-
-  
-}
-</file>
-
-<file path="src/modules/student/interfaces/IStudentRepository.ts">
-import { Student } from "../schema/Student.schema";
-import { CreateStudentInput } from "../inputs/CreateStudent.input";
-import { UpdateStudentInput } from "../inputs/UpdateStudent.input";
-
-export interface IStudentRepository {
-  // RF03
-  create(data: CreateStudentInput): Promise<Student>;
-
-  findById(id: string): Promise<Student | null>;
-  findByEmail(email: string): Promise<Student | null>;
-
-  // RN06: uniqueness checks for CPF and email
-  findByCpf(cpf: string): Promise<Student | null>;
-
-  // RF01: the only method that returns the password hash
-  findByEmailWithPassword(email: string): Promise<Student | null>;
-
-  // RF04
-  update(studentId: string, data: UpdateStudentInput): Promise<void>;
-
-  // RF04: the CPF may only be corrected by an administrator
-  updateCpf(studentId: string, cpf: string): Promise<void>;
-
-  // RF10 / RNF08: deactivation, never physical deletion
-  deactivate(studentId: string): Promise<void>;
-}
-</file>
-
-<file path="src/modules/student/repository/StudentRepository.ts">
-import { Repository } from "typeorm";
-import { Student } from "../schema/Student.schema";
-import { StudentPhone } from "../schema/StudentPhone.schema";
-import { IStudentRepository } from "../interfaces/IStudentRepository";
-import { CreateStudentInput } from "../validators/CreateStudentValidator";
-import { AppError } from "../../../shared/errors/AppError";
-import { StudentExperience } from "../schema/StudentExperience.schema";
-import { StudentLanguage } from "../schema/StudentLanguage.schema";
-import { UpdateStudentInput } from "../validators/UpdateStudentValidator";
-
-export class StudentRepository implements IStudentRepository {
-  constructor(private repository: Repository<Student>) {}
-
-  // RF03: the student and their phone numbers are written together, so a
-  // failure halfway through never leaves a student without a phone.
-  async create(data: CreateStudentInput): Promise<Student> {
-    return await this.repository.manager.transaction(async (tm) => {
-      const student = tm.create(Student, {
-        cpf: data.cpf,
-        name: data.name,
-        email: data.email,
-        passwordHash: data.password,
-        birthDate: data.birthDate,
-        termsAcceptedAt: data.termsAcceptedAt,
-        privacyAcceptedAt: data.privacyAcceptedAt,
-        phones: data.phones.map((number) => ({ number })),
-      });
-
-      return await tm.save(student);
+describe("RN21 — desativar revoga as sessões do alvo", () => {
+  it("derruba a sessão do admin desativado imediatamente", async () => {
+    const actor = await createAdmin(ctx.dataSource, ctx.hasher, {
+      email: "actor@test.local",
     });
-  }
-
-  async findById(id: string): Promise<Student | null> {
-    return await this.repository.findOne({
-      where: { id, active: true },
-      relations: { phones: true },
+    const target = await createAdmin(ctx.dataSource, ctx.hasher, {
+      email: "target@test.local",
     });
-  }
 
-  async findByEmail(email: string): Promise<Student | null> {
-    return await this.repository.findOne({
-      where: { email, active: true },
-      relations: { phones: true },
-    });
-  }
-
-  // RN06: used to reject a duplicate CPF at sign-up. Deactivated students are
-  // included on purpose — the CPF stays taken.
-  async findByCpf(cpf: string): Promise<Student | null> {
-    return await this.repository.findOne({ where: { cpf } });
-  }
-
-  // RF01: passwordHash carries `select: false`, so it has to be asked for
-  // explicitly. This is the only place that does so.
-  async findByEmailWithPassword(email: string): Promise<Student | null> {
-    return await this.repository.findOne({
-      where: { email, active: true },
-      select: { id: true, email: true, passwordHash: true, active: true },
-    });
-  }
-
-  // RF04: name, email, password and phones. Replacing the phone set is done
-  // inside the same transaction as the scalar update.
-  async update(studentId: string, data: UpdateStudentInput): Promise<void> {
-    await this.repository.manager.transaction(async (tm) => {
-      const { phones, languages, experiences, ...scalarFields } = data;
-
-      // password cru vira passwordHash. Se o service já hasheia, remova daqui.
-      const fieldsToUpdate: Partial<Student> = { ...scalarFields };
-
-      if (Object.keys(fieldsToUpdate).length > 0) {
-        const result = await tm.update(
-          Student,
-          { id: studentId },
-          fieldsToUpdate,
-        );
-
-        if (result.affected === 0) {
-          throw new AppError("Student not found", 404);
-        }
-      }
-
-      if (phones) {
-        await tm.delete(StudentPhone, { studentId });
-        await tm.save(
-          phones.map((number) =>
-            tm.create(StudentPhone, { studentId, number }),
-          ),
-        );
-      }
-
-      if (languages) {
-        await tm.delete(StudentLanguage, { studentId });
-        await tm.save(
-          languages.map((language) =>
-            tm.create(StudentLanguage, {
-              studentId,
-              name: language.name,
-              level: language.level,
-            }),
-          ),
-        );
-      }
-
-      if (experiences) {
-        await tm.delete(StudentExperience, { studentId });
-        await tm.save(
-          experiences.map((experience) =>
-            tm.create(StudentExperience, {
-              studentId,
-              company: experience.company,
-              role: experience.role,
-              startDate: experience.startDate,
-              endDate: experience.endDate,
-              description: experience.description,
-            }),
-          ),
-        );
-      }
-    });
-  }
-
-  // RF04: administrator-only correction. Authorisation is enforced upstream.
-  async updateCpf(studentId: string, cpf: string): Promise<void> {
-    const result = await this.repository.update({ id: studentId }, { cpf });
-
-    if (result.affected === 0) {
-      throw new AppError("Student not found", 404);
-    }
-  }
-
-  // RF10 / RNF08: soft delete. The row is kept so that applications and
-  // enrolments keep their foreign keys intact.
-  async deactivate(studentId: string): Promise<void> {
-    const result = await this.repository.update(
-      { id: studentId },
-      { active: false },
+    const actorAuth = await loginAs(ctx, "actor@test.local", DEFAULT_PASSWORD);
+    const targetAuth = await loginAs(
+      ctx,
+      "target@test.local",
+      DEFAULT_PASSWORD,
     );
 
-    if (result.affected === 0) {
-      throw new AppError("Student not found", 404);
-    }
-  }
-}
+    await ctx.request
+      .patch(`/api/v1/admin/administrators/${target.id}/deactivate`)
+      .set(authHeader(actorAuth.token))
+      .expect(200);
+
+    await ctx.request
+      .get("/api/v1/admin/administrators")
+      .set(authHeader(targetAuth.token))
+      .expect(401);
+  });
+});
 </file>
 
-<file path="src/modules/student/schema/Student.schema.ts">
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  OneToMany,
-  PrimaryGeneratedColumn,
-} from "typeorm";
-import { StudentPhone } from "./StudentPhone.schema";
+<file path="modules/admin/last-active-race.test.ts">
+// POR QUE EXISTE: RN21 proíbe ficar sem nenhum admin ativo. Duas requisições
+// simultâneas de desativação mútua só podem terminar com um vencedor. Sem o
+// lock pessimista do AdminRepository, as duas passariam pela checagem e o
+// sistema ficaria sem admin. É o bug que você não enxerga no Postman.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { createTestContext, TestContext, loginAs, authHeader } from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
 
-@Entity("students")
-export class Student {
-  // RNF09: every primary key is a system-generated UUID
-  @PrimaryGeneratedColumn("uuid")
-  id: string;
+let ctx: TestContext;
 
-  // RN06: CPF must be unique. Stored as 11 digits only, no punctuation.
-  // RNF03: masking outside the student's own profile belongs to the
-  // presentation layer, not to the entity.
-  @Column({ name: "cpf", type: "char", length: 11, unique: true })
-  cpf: string;
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
 
-  @Column({ name: "name", type: "varchar", length: 150 })
-  name: string;
+beforeEach(async () => {
+  await truncateAll();
+});
 
-  // RN06: email must be unique across all users
-  @Column({ name: "email", type: "varchar", length: 255, unique: true })
-  email: string;
+describe("RN21 — corrida no último admin ativo", () => {
+  it.skip("apenas um de dois admins simultâneos consegue desativar o outro", async () => {
+    const a = await createAdmin(ctx.dataSource, ctx.hasher, { email: "a@test.local" });
+    const b = await createAdmin(ctx.dataSource, ctx.hasher, { email: "b@test.local" });
 
-  // RNF01: bcrypt (cost 12 minimum) or Argon2id — never plain text.
-  // `select: false` keeps the hash out of ordinary queries.
-  @Column({
-    name: "password_hash",
-    type: "varchar",
-    length: 255,
-    select: false,
-  })
-  passwordHash: string;
+    const authA = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
+    const authB = await loginAs(ctx, "b@test.local", DEFAULT_PASSWORD);
 
-  @Column({ name: "birth_date", type: "date" })
-  birthDate: string;
+    const [ra, rb] = await Promise.all([
+      ctx.request
+        .patch(`/api/v1/admin/administrators/${b.id}/deactivate`)
+        .set(authHeader(authA.token)),
+      ctx.request
+        .patch(`/api/v1/admin/administrators/${a.id}/deactivate`)
+        .set(authHeader(authB.token)),
+    ]);
 
-  @Column({ name: "bio", type: "text", nullable: true })
-  bio: string | null;
-
-  @Column({
-    name: "linkedin_url",
-    type: "varchar",
-    length: 255,
-    nullable: true,
-  })
-  linkedinUrl: string | null;
-
-  @Column({
-    name: "portfolio_url",
-    type: "varchar",
-    length: 255,
-    nullable: true,
-  })
-  portfolioUrl: string | null;
-
-  // RF10 / RNF08: soft delete instead of physical removal
-  @Column({ name: "active", type: "boolean", default: true })
-  active: boolean;
-
-  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
-  createdAt: Date;
-
-  @Column({
-    name: "expected_graduation",
-    type: "char",
-    length: 7,
-    nullable: true,
-  })
-  expectedGraduation: string | null;
-
-  // Semestre atual (1 a 20, para caber qualquer curso)
-  @Column({ name: "current_semester", type: "smallint", nullable: true })
-  currentSemester: number | null;
-
-  @Column({ name: "institution", type: "varchar", length: 150, nullable: true })
-  institution: string | null;
-
-  // RF03 / RNF03: signing up requires accepting the terms of use and the
-  // privacy policy, and the LGPD requires that consent to be recorded.
-  @Column({ name: "terms_accepted_at", type: "timestamptz" })
-  termsAcceptedAt: Date;
-
-  @Column({ name: "privacy_accepted_at", type: "timestamptz" })
-  privacyAcceptedAt: Date;
-
-  // RF03: one or more phone numbers (multivalued attribute in the ERD)
-  @OneToMany(() => StudentPhone, (phone) => phone.student, {
-    cascade: ["insert", "update"],
-  })
-  phones: StudentPhone[];
-
-  @OneToMany(() => StudentLanguage, (language) => language.student, {
-    cascade: ["insert", "update"],
-  })
-  languages: StudentLanguage[];
-
-  @OneToMany(() => StudentExperience, (experience) => experience.student, {
-    cascade: ["insert", "update"],
-  })
-  experiences: StudentExperience[];
-}
+    const statuses = [ra.status, rb.status].sort();
+    expect(statuses).toEqual([200, 409]);
+  });
+});
 </file>
 
-<file path="src/modules/student/schema/StudentExperience.schema.ts">
-import {
-  Column,
-  Entity,
-  Index,
-  JoinColumn,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from "typeorm";
-import { Student } from "./Student.schema";
+<file path="modules/auth/account-enumeration.test.ts">
+// POR QUE EXISTE: RN23 exige resposta idêntica para e-mail inexistente, senha
+// errada e conta desativada. Se um desses casos responder diferente, um
+// atacante descobre quem está cadastrado.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { createTestContext, TestContext } from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
 
-@Entity("student_experiences")
-@Index(["studentId"])
-export class StudentExperience {
-  @PrimaryGeneratedColumn("uuid")
-  id: string;
+let ctx: TestContext;
 
-  @Column({ name: "student_id", type: "uuid" })
-  studentId: string;
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
 
-  @Column({ name: "company", type: "varchar", length: 150 })
-  company: string;
+beforeEach(async () => {
+  await truncateAll();
+});
 
-  @Column({ name: "role", type: "varchar", length: 100 })
-  role: string;
-
-  @Column({ name: "start_date", type: "date" })
-  startDate: string; // "YYYY-MM-DD"
-
-  // null = experiência atual
-  @Column({ name: "end_date", type: "date", nullable: true })
-  endDate: string | null;
-
-  @Column({ name: "description", type: "text", nullable: true })
-  description: string | null;
-
-  @ManyToOne(() => Student, (student) => student.experiences, {
-    onDelete: "CASCADE",
-  })
-  @JoinColumn({ name: "student_id" })
-  student: Student;
-}
-</file>
-
-<file path="src/modules/student/schema/StudentLanguage.schema.ts">
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from "typeorm";
-import { Student } from "./Student.schema";
-
-export enum LanguageLevel {
-  BASIC = "basic",
-  INTERMEDIATE = "intermediate",
-  ADVANCED = "advanced",
-  FLUENT = "fluent",
-  NATIVE = "native",
-}
-
-@Entity("student_languages")
-export class StudentLanguage {
-  @PrimaryGeneratedColumn("uuid")
-  id: string;
-
-  @Column({ name: "student_id", type: "uuid" })
-  studentId: string;
-
-  @Column({ name: "name", type: "varchar", length: 50 })
-  name: string;
-
-  @Column({
-    name: "level",
-    type: "enum",
-    enum: LanguageLevel,
-  })
-  level: LanguageLevel;
-
-  @ManyToOne(() => Student, (student) => student.languages, {
-    onDelete: "CASCADE",
-  })
-  @JoinColumn({ name: "student_id" })
-  student: Student;
-}
-</file>
-
-<file path="src/modules/student/schema/StudentPhone.schema.ts">
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from "typeorm";
-import { Student } from "./Student.schema";
-
-// Section 6.2: phone numbers are multivalued in the ERD and therefore live
-// in their own table.
-@Entity("student_phones")
-export class StudentPhone {
-  @PrimaryGeneratedColumn("uuid")
-  id: string;
-
-  @Column({ name: "number", type: "varchar", length: 20 })
-  number: string;
-
-  // RNF08: every foreign key is constrained at the database level.
-  // The column name below must stay in sync with the @Column("student_id")
-  // declaration — if they diverge, TypeORM silently creates two columns.
-  @ManyToOne(() => Student, (student) => student.phones, {
-    nullable: false,
-    onDelete: "CASCADE",
-  })
-  @JoinColumn({ name: "student_id" })
-  student: Student;
-
-  @Column({ name: "student_id", type: "uuid" })
-  studentId: string;
-}
-</file>
-
-<file path="src/modules/student/service/StudentService.ts">
-import { AppError } from "../../../shared/errors/AppError";
-import { CreateStudentInput } from "../inputs/CreateStudent.input";
-import { StudentRepository } from "../repository/StudentRepository";
-import bcrypt from "bcrypt";
-
-type ResponseResultStudent = {
-  id: string;
-  cpf: string;
-  name: string;
-  email: string;
-  birthDate: string;
-  // RF03: one or more phone numbers are required at sign-up
-  phones: string[];
-};
-
-export class StudentService {
-  constructor(private repository: StudentRepository) {}
-
-  private async hashPassword(password: string) {
-    return bcrypt.hash(password, 12);
-  }
-
-  async createService(
-    dataStudent: CreateStudentInput,
-  ): Promise<ResponseResultStudent> {
-    const existingEmail = await this.repository.findByEmail(dataStudent.email);
-
-    if (existingEmail) {
-      throw new AppError("Email Already Use.", 409);
-    }
-
-    const existingCpf = await this.repository.findByCpf(dataStudent.cpf);
-    if (existingCpf) {
-      throw new AppError("CPF already in use", 409);
-    }
-
-    const passwordHashed = await this.hashPassword(dataStudent.password);
-
-    const student = await this.repository.create({
-      cpf: dataStudent.cpf,
-      name: dataStudent.name,
-      email: dataStudent.email,
-      password: passwordHashed,
-      birthDate: dataStudent.birthDate,
-      phones: dataStudent.phones,
-      privacyAcceptedAt: dataStudent.privacyAcceptedAt,
-      termsAcceptedAt: dataStudent.termsAcceptedAt,
+describe("RN23 — login não revela se um e-mail está cadastrado", () => {
+  it.skip("responde igual para existente/inativa/inexistente", async () => {
+    await createAdmin(ctx.dataSource, ctx.hasher, {
+      email: "ativo@test.local",
+      active: true,
+    });
+    await createAdmin(ctx.dataSource, ctx.hasher, {
+      email: "inativa@test.local",
+      active: false,
     });
 
-    return {
-      id: student.id,
-      email: student.email,
-      cpf: student.cpf,
-      name: student.email,
-      birthDate: student.birthDate,
-      phones: student.phones.map((p) => p.number),
-    };
+    const cases = [
+      { email: "ativo@test.local", password: "SenhaErrada999" },
+      { email: "inativa@test.local", password: DEFAULT_PASSWORD },
+      { email: "naoexiste@test.local", password: DEFAULT_PASSWORD },
+    ];
+
+    const responses = await Promise.all(
+      cases.map((body) => ctx.request.post("/api/v1/auth/login").send(body)),
+    );
+
+    for (const res of responses) {
+      expect(res.status).toBe(401);
+    }
+
+    for (const res of responses) {
+      expect(res.body).toEqual({
+        status: "error",
+        message: "E-mail ou senha inválidos",
+      });
+    }
+  });
+});
+</file>
+
+<file path="modules/auth/single-session.test.ts">
+// POR QUE EXISTE: RN19 (sessão única por conta). O AuthService já implementa
+// via `replaceActiveSession`, mas é fácil quebrar numa refatoração e ninguém
+// percebe até um token antigo continuar funcionando depois do usuário ter
+// trocado de dispositivo por segurança.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { createTestContext, TestContext, loginAs, authHeader } from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
+
+let ctx: TestContext;
+
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
+
+beforeEach(async () => {
+  await truncateAll();
+});
+
+describe("RN19 — apenas uma sessão ativa por conta", () => {
+  it.skip("invalida o token anterior quando um novo login acontece", async () => {
+    await createAdmin(ctx.dataSource, ctx.hasher, { email: "a@test.local" });
+
+    const first = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
+    const second = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
+
+    await ctx.request
+      .get("/api/v1/admin/administrators")
+      .set(authHeader(first.token))
+      .expect(401);
+
+    await ctx.request
+      .get("/api/v1/admin/administrators")
+      .set(authHeader(second.token))
+      .expect(200);
+  });
+});
+</file>
+
+<file path="modules/student/cpf-masked.test.ts">
+// POR QUE EXISTE: RN32 manda mascarar o CPF em qualquer listagem do admin.
+// Não é feature, é conformidade — um CPF completo vazando numa tela de
+// listagem pode virar problema com a LGPD. O teste confere que o CPF cru
+// não aparece nem no item nem no corpo inteiro da resposta.
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { createTestContext, TestContext, loginAs, authHeader } from "../../utils/app";
+import { truncateAll } from "../../setup/truncate";
+import { createAdmin, createStudent, DEFAULT_PASSWORD } from "../../utils/fixtures";
+
+let ctx: TestContext;
+
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
+
+beforeEach(async () => {
+  await truncateAll();
+});
+
+describe("RN32 — CPF mascarado na listagem do admin", () => {
+  it.skip("nunca devolve o CPF completo", async () => {
+    await createStudent(ctx.dataSource, ctx.hasher, {
+      cpf: "39053344705",
+      email: "s1@test.local",
+    });
+    await createAdmin(ctx.dataSource, ctx.hasher, { email: "a@test.local" });
+    const { token } = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
+
+    const res = await ctx.request
+      .get("/api/v1/admin/students")
+      .set(authHeader(token))
+      .expect(200);
+
+    expect(res.body.data.items).toHaveLength(1);
+    expect(res.body.data.items[0].cpf).toBe("•••.533.447-••");
+    expect(JSON.stringify(res.body)).not.toContain("39053344705");
+  });
+});
+</file>
+
+<file path="setup/env.ts">
+import dotenv from "dotenv";
+import path from "node:path";
+import { ensureMigrations } from "./migrate";
+
+dotenv.config({
+  path: path.resolve(__dirname, "../../.env.test"),
+  override: true,
+});
+
+if (process.env.DB_DATABASE !== "estagia_mais_test") {
+  throw new Error(
+    `DB_DATABASE precisa ser 'estagia_mais_test' durante os testes. ` +
+      `Recebido: '${process.env.DB_DATABASE}'.`,
+  );
+}
+
+await ensureMigrations();
+</file>
+
+<file path="setup/global-setup.ts">
+import { AppDataSource } from "@/shared/database/data-source";
+
+export async function setup(): Promise<void> {
+  // Nota: As migrations serão executadas quando os testes realmente rodarem
+  // Por agora, como os testes estão com skip(), não precisamos das tabelas
+  console.log("Test environment setup...");
+}
+
+export async function teardown(): Promise<void> {
+  if (AppDataSource.isInitialized) {
+    await AppDataSource.destroy();
   }
 }
 </file>
 
-<file path="src/modules/student/validators/CreateStudentValidator.ts">
-import { z } from "zod";
+<file path="setup/migrate.ts">
+import { AppDataSource } from "@/shared/database/data-source";
 
-// ============================================================================
-// Schemas primitivos reutilizáveis (Create + Update)
-// ============================================================================
-
-// RN06 / RNF03: CPF como 11 dígitos, sem pontuação
-export const cpfSchema = z
-  .string()
-  .trim()
-  .regex(/^\d{11}$/, "CPF must contain exactly 11 digits, no punctuation");
-
-// RN06: email único, formato válido
-export const emailSchema = z.email();
-
-export const nameSchema = z
-  .string()
-  .trim()
-  .min(3, "Name must have at least 3 characters")
-  .max(150, "Name must be at most 150 characters");
-
-// RNF01: senha mínima; o hash (bcrypt cost 12) acontece no service
-export const passwordSchema = z
-  .string()
-  .min(8, "Password must have at least 8 characters")
-  .max(72, "Password must be at most 72 characters") // limite do bcrypt
-  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-  .regex(/[0-9]/, "Password must contain at least one number");
-
-// birthDate é `type: "date"` na entity → string "YYYY-MM-DD"
-export const birthDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "birthDate must be in YYYY-MM-DD format")
-  .refine(
-    (value) => {
-      const date = new Date(`${value}T00:00:00Z`);
-      return (
-        !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value)
-      );
-    },
-    { message: "birthDate is not a valid calendar date" },
-  )
-  .refine(
-    (value) => {
-      const date = new Date(`${value}T00:00:00Z`);
-      return date.getTime() <= Date.now();
-    },
-    { message: "birthDate cannot be in the future" },
-  );
-
-// RF03: pelo menos 1 telefone (multivalued attribute)
-export const phoneSchema = z
-  .string()
-  .trim()
-  .regex(/^\d{10,11}$/, "Phone must contain 10 or 11 digits, no punctuation");
-
-export const phonesSchema = z
-  .array(phoneSchema)
-  .min(1, "At least one phone number is required")
-  .max(5, "At most 5 phone numbers are allowed")
-  .refine((phones) => new Set(phones).size === phones.length, {
-    message: "Duplicate phone numbers are not allowed",
-  });
-
-// ============================================================================
-// Schemas de perfil profissional (RF04) — opcionais, usados no Update
-// ============================================================================
-
-export const urlSchema = z
-  .url("Must be a valid URL")
-  .max(255, "URL must be at most 255 characters")
-  .nullable();
-
-export const bioSchema = z
-  .string()
-  .trim()
-  .max(1000, "Bio must be at most 1000 characters")
-  .nullable();
-
-// "2027-07"
-export const expectedGraduationSchema = z
-  .string()
-  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "expectedGraduation must be YYYY-MM")
-  .refine(
-    (value) => {
-      const [year, month] = value.split("-").map(Number);
-      const end = new Date(Date.UTC(year, month, 0));
-      return end.getTime() >= Date.now();
-    },
-    { message: "expectedGraduation cannot be in the past" },
-  )
-  .nullable();
-
-export const currentSemesterSchema = z
-  .number()
-  .int("currentSemester must be an integer")
-  .min(1, "currentSemester must be at least 1")
-  .max(20, "currentSemester must be at most 20")
-  .nullable();
-
-export const institutionSchema = z
-  .string()
-  .trim()
-  .min(2, "institution must have at least 2 characters")
-  .max(150, "institution must be at most 150 characters")
-  .nullable();
-
-// ============================================================================
-// Consentimentos LGPD (RF03 / RNF03)
-// ============================================================================
-
-export const termsAcceptedAtSchema = z.coerce.date({
-  error: "termsAcceptedAt must be a valid date",
-});
-
-export const privacyAcceptedAtSchema = z.coerce.date({
-  error: "privacyAcceptedAt must be a valid date",
-});
-
-// ============================================================================
-// RF03 — Cadastro de estudante
-// ============================================================================
-
-export const createStudentSchema = z
-  .object({
-    cpf: cpfSchema,
-    name: nameSchema,
-    email: emailSchema,
-    password: passwordSchema,
-    birthDate: birthDateSchema,
-    phones: phonesSchema,
-    termsAcceptedAt: termsAcceptedAtSchema,
-    privacyAcceptedAt: privacyAcceptedAtSchema,
-  })
-  .strict(); // rejeita campos desconhecidos
-
-export type CreateStudentInput = z.infer<typeof createStudentSchema>;
+// Roda uma vez por worker, antes do primeiro teste do processo.
+// Idempotente: se as tabelas já existem, runMigrations é no-op.
+export async function ensureMigrations(): Promise<void> {
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
+  }
+  await AppDataSource.runMigrations({ transaction: "all" });
+}
 </file>
 
-<file path="src/modules/student/validators/UpdateStudentValidator.ts">
-import { z } from "zod";
-import {
-  nameSchema,
-  emailSchema,
-  passwordSchema,
-  phonesSchema,
-  urlSchema,
-  bioSchema,
-  expectedGraduationSchema,
-  currentSemesterSchema,
-  institutionSchema,
-} from "./CreateStudentValidator";
-import { LanguageLevel } from "../schema/StudentLanguage.schema";
+<file path="setup/truncate.ts">
+import { AppDataSource } from "@/shared/database/data-source";
 
-// ============================================================================
-// Sub-schemas de idiomas (RF04)
-// ============================================================================
+export async function truncateAll(): Promise<void> {
+  // Apenas trunca se o banco está inicializado
+  if (!AppDataSource.isInitialized) {
+    return;
+  }
 
-// nível (uma string do enum)
-const languageLevelSchema = z.enum(LanguageLevel, {
-  error: "Invalid language level",
-});
-
-// um idioma (objeto)
-const languageSchema = z
-  .object({
-    name: z.string().trim().min(2).max(50),
-    level: languageLevelSchema,
-  })
-  .strict();
-
-// lista de idiomas (array de objetos)
-const languagesSchema = z
-  .array(languageSchema)
-  .max(10)
-  .refine(
-    (list) =>
-      new Set(list.map((l) => l.name.trim().toLowerCase())).size ===
-      list.length,
-    { message: "Duplicate languages are not allowed" },
-  );
-// ============================================================================
-// Sub-schemas de experiências (RF04)
-// ============================================================================
-
-const experienceSchema = z
-  .object({
-    company: z
-      .string()
-      .trim()
-      .min(2, "Company must have at least 2 characters")
-      .max(150, "Company must be at most 150 characters"),
-
-    role: z
-      .string()
-      .trim()
-      .min(2, "Role must have at least 2 characters")
-      .max(100, "Role must be at most 100 characters"),
-
-    startDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must be YYYY-MM-DD"),
-
-    // null = experiência atual (sem data de fim)
-    endDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "endDate must be YYYY-MM-DD")
-      .nullable(),
-
-    description: z
-      .string()
-      .trim()
-      .max(2000, "Description must be at most 2000 characters")
-      .nullable(),
-  })
-  .strict()
-  .refine((data) => !data.endDate || data.endDate >= data.startDate, {
-    message: "endDate cannot be before startDate",
-    path: ["endDate"],
-  })
-  .refine((data) => data.startDate <= new Date().toISOString().slice(0, 10), {
-    message: "startDate cannot be in the future",
-    path: ["startDate"],
-  });
-
-const experiencesSchema = z
-  .array(experienceSchema)
-  .max(20, "At most 20 experiences are allowed");
-
-// ============================================================================
-// RF04 — Edição de perfil (PATCH parcial)
-// ============================================================================
-//
-// Fora do escopo deste schema, de propósito:
-//   - cpf: correção só via administrador (updateCpf / RF04)
-//   - termsAcceptedAt / privacyAcceptedAt: consentimento só no cadastro
-//
-// Semântica de PATCH:
-//   - campo ausente        → undefined → não altera
-//   - campo = null         → limpa o valor (para os nullable)
-//   - campo = valor        → atualiza
-
-export const updateStudentSchema = z
-  .object({
-    // --- Campos básicos ---
-    name: nameSchema.optional(),
-    email: emailSchema.optional(),
-    phones: phonesSchema.optional(),
-
-    // --- Perfil profissional ---
-    bio: bioSchema.optional(),
-    linkedinUrl: urlSchema.optional(),
-    portfolioUrl: urlSchema.optional(),
-    expectedGraduation: expectedGraduationSchema.optional(),
-    currentSemester: currentSemesterSchema.optional(),
-    institution: institutionSchema.optional(),
-
-    // --- Listas multivaloradas ---
-    languages: languagesSchema.optional(),
-    experiences: experiencesSchema.optional(),
-  })
-  .strict()
-  .refine((data) => Object.keys(data).length > 0, {
-    message: "At least one field must be provided",
-  });
-
-export type UpdateStudentInput = z.infer<typeof updateStudentSchema>;
+  try {
+    await AppDataSource.query(`TRUNCATE TABLE
+      "sessions", "admins", "students"
+      RESTART IDENTITY CASCADE`);
+  } catch (error) {
+    // Se as tabelas não existem (ex: testes skipados), ignora
+    console.warn("Truncate failed (tables may not exist):", (error as Error).message);
+  }
+}
 </file>
 
-<file path="src/modules/student/studentRoutes.ts">
-import { Router } from "express";
-import { studentController } from "../../shared/container";
+<file path="utils/app.ts">
+import supertest from "supertest";
+import { DataSource } from "typeorm";
+import { Application } from "express";
+import { App } from "@/App";
+import { buildContainer, Container } from "@/shared/container";
+import { AppDataSource } from "@/shared/database/data-source";
+import { FakePasswordHasher } from "./FakePasswordHasher";
+import { TestEmailSender } from "./TestEmailSender";
 
-const studentRoutes = Router();
+export type TestContext = {
+  app: Application;
+  // O supertest mudou os tipos: o retorno virou TestAgent<Test>, não
+  // SuperTest<Test>. Usar ReturnType evita depender do nome do tipo.
+  request: ReturnType<typeof supertest>;
+  container: Container;
+  dataSource: DataSource;
+  hasher: FakePasswordHasher;
+  emailSender: TestEmailSender;
+};
 
-studentRoutes.post(
-  "/",
-  studentController.createController.bind(studentController),
-);
+export async function createTestContext(): Promise<TestContext> {
+  const hasher = new FakePasswordHasher();
+  const emailSender = new TestEmailSender();
 
-export { studentRoutes };
+  // Inicializa o banco de dados se ainda não estiver inicializado
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
+  }
+
+  const container = buildContainer({
+    passwordHasher: hasher,
+  });
+
+  const app = new App(container);
+
+  return {
+    app: app.app,
+    request: supertest(app.app),
+    container,
+    dataSource: AppDataSource,
+    hasher,
+    emailSender,
+  };
+}
+
+export async function loginAs(
+  ctx: TestContext,
+  email: string,
+  password: string,
+): Promise<{ token: string; accountId: string; role: string }> {
+  const res = await ctx.request
+    .post("/api/v1/auth/login")
+    .send({ email, password })
+    .expect(200);
+
+  return {
+    token: res.body.data.token,
+    accountId: res.body.data.accountId,
+    role: res.body.data.role,
+  };
+}
+
+export function authHeader(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}` };
+}
+</file>
+
+<file path="utils/FakePasswordHasher.ts">
+import { createHash } from "node:crypto";
+import { IPasswordHasher } from "@/shared/services/PasswordHasher";
+
+export class FakePasswordHasher implements IPasswordHasher {
+  private readonly prefix = "fake$";
+
+  async hash(password: string): Promise<string> {
+    return this.prefix + createHash("sha256").update(password).digest("hex");
+  }
+
+  async verify(password: string, hash: string): Promise<boolean> {
+    if (!hash.startsWith(this.prefix)) return false;
+    return (await this.hash(password)) === hash;
+  }
+}
+</file>
+
+<file path="utils/fixtures.ts">
+import { DataSource } from "typeorm";
+import { Admin } from "@/modules/admin/schema/Admin.schema";
+import { Student } from "@/modules/student/schema/Student.schema";
+import { StudentPhone } from "@/modules/student/schema/StudentPhone.schema";
+import { IPasswordHasher } from "@/shared/services/PasswordHasher";
+
+export const DEFAULT_PASSWORD = "SenhaForte123";
+
+// Sufixo para evitar colisão quando o teste cria vários usuários.
+let counter = 0;
+function nextSuffix(): string {
+  counter += 1;
+  return `${Date.now()}${counter}`;
+}
+
+export async function createAdmin(
+  ds: DataSource,
+  hasher: IPasswordHasher,
+  overrides: Partial<Admin> & { password?: string } = {},
+): Promise<Admin> {
+  const repo = ds.getRepository(Admin);
+  const passwordHash = await hasher.hash(
+    overrides.password ?? DEFAULT_PASSWORD,
+  );
+
+  const admin = repo.create({
+    name: overrides.name ?? "Admin Teste",
+    email: overrides.email ?? `admin_${nextSuffix()}@test.local`,
+    passwordHash,
+    active: overrides.active ?? true,
+    createdById: overrides.createdById ?? null,
+  });
+
+  return repo.save(admin);
+}
+
+export async function createStudent(
+  ds: DataSource,
+  hasher: IPasswordHasher,
+  overrides: Partial<Student> & {
+    password?: string;
+    phoneNumbers?: string[];
+  } = {},
+): Promise<Student> {
+  const repo = ds.getRepository(Student);
+  const passwordHash = await hasher.hash(
+    overrides.password ?? DEFAULT_PASSWORD,
+  );
+
+  const student = repo.create({
+    // CPF válido pelo dígito verificador.
+    cpf: overrides.cpf ?? "39053344705",
+    name: overrides.name ?? "Estudante Teste",
+    email: overrides.email ?? `student_${nextSuffix()}@test.local`,
+    passwordHash,
+    birthDate: overrides.birthDate ?? "2000-01-01",
+    active: overrides.active ?? true,
+    termsAcceptedAt: overrides.termsAcceptedAt ?? new Date(),
+    privacyAcceptedAt: overrides.privacyAcceptedAt ?? new Date(),
+    phones: (overrides.phoneNumbers ?? ["67999999999"]).map((number) => {
+      const p = new StudentPhone();
+      p.number = number;
+      return p;
+    }),
+  });
+
+  return repo.save(student);
+}
+</file>
+
+<file path="utils/TestEmailSender.ts">
+export type SentEmail = {
+  to: string;
+  subject: string;
+  body: string;
+};
+
+export class TestEmailSender {
+  readonly sent: SentEmail[] = [];
+
+  async send(email: SentEmail): Promise<void> {
+    this.sent.push(email);
+  }
+
+  reset(): void {
+    this.sent.length = 0;
+  }
+}
 </file>
 
 </files>

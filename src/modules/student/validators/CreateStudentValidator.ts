@@ -1,4 +1,15 @@
 import { z } from "zod";
+import { passwordSchema } from "../../../shared/validators/passwordSchema";
+import {
+  hasMinimumAge,
+  MIN_AGE_YEARS,
+} from "../../../shared/services/CalculatorBirthDate";
+import { config } from "../../../shared/config";
+import {
+  EducationLevel,
+  ProfileVisibility,
+  PUBLIC_VISIBILITY_MIN_AGE,
+} from "../types/StudentEnums";
 
 // ============================================================================
 // Reusable primitive schemas (Create + Update)
@@ -49,16 +60,6 @@ export const nameSchema = z
 // RNF01: minimum strength here; the hash (bcrypt cost 12) happens in the service.
 // bcrypt only reads the first 72 BYTES (not characters), so the limit is
 // measured in bytes — accents and emojis take more than one byte each.
-export const passwordSchema = z
-  .string()
-  .min(8, "Password must have at least 8 characters")
-  .refine(
-    (value) => Buffer.byteLength(value, "utf8") <= 72,
-    "Password is too long (bcrypt limit is 72 bytes)",
-  )
-  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-  .regex(/[0-9]/, "Password must contain at least one number");
 
 // True only for real calendar dates ("2024-02-31" is rejected).
 export function isValidCalendarDate(value: string): boolean {
@@ -74,24 +75,37 @@ export const calendarDateSchema = (field: string) =>
     .regex(/^\d{4}-\d{2}-\d{2}$/, `${field} must be in YYYY-MM-DD format`)
     .refine(isValidCalendarDate, `${field} is not a valid calendar date`);
 
-export const birthDateSchema = calendarDateSchema("birthDate").refine(
-  (value) => new Date(`${value}T00:00:00Z`).getTime() <= Date.now(),
-  { message: "birthDate cannot be in the future" },
-);
+export const birthDateSchema = calendarDateSchema("birthDate")
+  .refine((value) => new Date(`${value}T00:00:00Z`).getTime() <= Date.now(), {
+    message: "birthDate cannot be in the future",
+  })
+  .refine(
+    (value) => hasMinimumAge(value, MIN_AGE_YEARS, new Date(), config.timezone),
+    { message: `Student must be at least ${MIN_AGE_YEARS} years old` },
+  );
 
-// RF03: at least 1 phone number (multivalued attribute)
-export const phoneSchema = z
+// RF10 / RN-C11: o telefone é OPCIONAL na v4.9, e cada número carrega a
+// marca "este número tem WhatsApp".
+export const phoneNumberSchema = z
   .string()
   .trim()
   .regex(/^\d{10,11}$/, "Phone must contain 10 or 11 digits, no punctuation");
 
+export const phoneSchema = z
+  .object({
+    number: phoneNumberSchema,
+    isWhatsapp: z.boolean().default(false),
+  })
+  .strict();
+
 export const phonesSchema = z
   .array(phoneSchema)
-  .min(1, "At least one phone number is required")
   .max(5, "At most 5 phone numbers are allowed")
-  .refine((phones) => new Set(phones).size === phones.length, {
-    message: "Duplicate phone numbers are not allowed",
-  });
+  .refine(
+    (phones) => new Set(phones.map((p) => p.number)).size === phones.length,
+    { message: "Duplicate phone numbers are not allowed" },
+  )
+  .default([]);
 
 // ============================================================================
 // Professional profile schemas (RF04) — optional, used on Update
@@ -101,6 +115,66 @@ export const urlSchema = z
   .url("Must be a valid URL")
   .max(255, "URL must be at most 255 characters")
   .nullable();
+
+// RN-C10: o link de currículo é o único campo que aponta para fora do site,
+// então é o de maior risco. Três travas: só https, só domínios conhecidos de
+// armazenamento/portfólio, e o sistema nunca guarda o arquivo — só o endereço.
+const ALLOWED_RESUME_HOSTS = [
+  "drive.google.com",
+  "docs.google.com",
+  "onedrive.live.com",
+  "1drv.ms",
+  "dropbox.com",
+  "linkedin.com",
+  "github.com",
+  "canva.com",
+];
+
+function isAllowedResumeUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+
+  if (url.protocol !== "https:") return false;
+
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+
+  // Compara o host inteiro ou um subdomínio dele. O ponto antes do domínio
+  // evita que "evil-github.com" passe por "github.com".
+  return ALLOWED_RESUME_HOSTS.some(
+    (allowed) => host === allowed || host.endsWith(`.${allowed}`),
+  );
+}
+
+export const resumeUrlSchema = z
+  .string()
+  .trim()
+  .max(255, "URL must be at most 255 characters")
+  .refine(isAllowedResumeUrl, {
+    message:
+      "O link do currículo precisa ser https e de um domínio permitido " +
+      "(Google Drive, OneDrive, Dropbox, LinkedIn, GitHub ou Canva)",
+  })
+  .nullable();
+
+// RF10 / RN-C2
+export const citySchema = z
+  .string()
+  .trim()
+  .min(2, "City must have at least 2 characters")
+  .max(120, "City must be at most 120 characters");
+
+export const educationLevelSchema = z.enum(EducationLevel, {
+  error: "Escolaridade inválida",
+});
+
+// RF13 / RN-C9
+export const visibilitySchema = z.enum(ProfileVisibility, {
+  error: "Visibilidade inválida",
+});
 
 export const bioSchema = z
   .string()
@@ -123,7 +197,10 @@ export const createStudentSchema = z
     email: emailSchema,
     password: passwordSchema,
     birthDate: birthDateSchema,
+    city: citySchema,
+    educationLevel: educationLevelSchema,
     phones: phonesSchema,
+    visibility: visibilitySchema.default(ProfileVisibility.HIDDEN),
     acceptedTerms: z.literal(true, {
       error: "You must accept the terms of use",
     }),
@@ -131,6 +208,25 @@ export const createStudentSchema = z
       error: "You must accept the privacy policy",
     }),
   })
-  .strict(); // rejects unknown fields
+  .strict() // rejects unknown fields
+  // RN-C9: menor de 18 não pode escolher PUBLICO. A checagem é aqui, e não
+  // em cada campo, porque depende de dois campos ao mesmo tempo.
+  .superRefine((data, ctx) => {
+    if (
+      data.visibility === ProfileVisibility.PUBLIC &&
+      !hasMinimumAge(
+        data.birthDate,
+        PUBLIC_VISIBILITY_MIN_AGE,
+        new Date(),
+        config.timezone,
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["visibility"],
+        message: `Menores de ${PUBLIC_VISIBILITY_MIN_AGE} anos não podem tornar o perfil público`,
+      });
+    }
+  });
 
 export type CreateStudentInput = z.infer<typeof createStudentSchema>;
