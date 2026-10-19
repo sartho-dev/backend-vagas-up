@@ -6,6 +6,8 @@ import { config } from "../config";
 import { Admin } from "../../modules/admin/schema/Admin.schema";
 import { Course } from "../../modules/course/schema/Course.schema";
 import { Formation } from "../../modules/formation/schema/Formation.schema";
+import { Advertiser } from "../../modules/advertiser/schema/Advertiser.schema";
+import { Responsible } from "../../modules/advertiser/schema/Responsible.schema";
 import { Session } from "../../modules/auth/schema/Session.schema";
 import { SingleUseToken } from "../../modules/auth/schema/SingleUseToken.schema";
 import { Student } from "../../modules/student/schema/Student.schema";
@@ -24,6 +26,7 @@ import { CandidateProfileV491792257488337 } from "./migrations/1792257488337-Can
 import { SingleUseTokens1792270518043 } from "./migrations/1792270518043-SingleUseTokens";
 import { Courses1792413012797 } from "./migrations/1792413012797-Courses";
 import { Formations1792413953262 } from "./migrations/1792413953262-Formations";
+import { Advertisers1792415961678 } from "./migrations/1792415961678-Advertisers";
 
 // Define a pasta base dependendo do ambiente
 const baseDir = path.join(__dirname, "../../");
@@ -42,6 +45,8 @@ export const AppDataSource = new DataSource({
     Admin,
     Course,
     Formation,
+    Advertiser,
+    Responsible,
     Session,
     SingleUseToken,
     Student,
@@ -64,6 +69,7 @@ export const AppDataSource = new DataSource({
     SingleUseTokens1792270518043,
     Courses1792413012797,
     Formations1792413953262,
+    Advertisers1792415961678,
   ],
 
   // Isso força o SSL necessário para o Google Cloud SQL

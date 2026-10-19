@@ -8,6 +8,8 @@ export type IssueTokenData = {
   targetEmail: string;
   accountType: AccountRole | null;
   accountId: string | null;
+  // RF22: preenchido só no convite de responsável.
+  advertiserId?: string | null;
   tokenHash: string;
   expiresAt: Date;
 };

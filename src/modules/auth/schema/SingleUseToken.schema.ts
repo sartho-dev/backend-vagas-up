@@ -1,6 +1,14 @@
-import { Column, Entity, Index, PrimaryGeneratedColumn } from "typeorm";
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from "typeorm";
 import { AccountRole } from "../types/AccountRole";
 import { TokenType } from "../types/TokenType";
+import { Advertiser } from "../../advertiser/schema/Advertiser.schema";
 
 // Token de uso único para links enviados por e-mail: recuperação de senha
 // (RN-A6), convite de responsável (RF22) e confirmação de troca de e-mail
@@ -38,6 +46,19 @@ export class SingleUseToken {
 
   @Column({ name: "account_id", type: "uuid", nullable: true })
   accountId: string | null;
+
+  // RF22: só no convite. Quando o link é gerado, a conta do convidado ainda
+  // não existe — o que existe é o anunciante a que ele vai pertencer.
+  //
+  // Esta coluna foi adiada na task 06 de propósito: `advertisers` não
+  // existia, e um uuid solto seria FK sem restrição no banco (contra a
+  // RNF06). Agora entra com a restrição junto.
+  @ManyToOne(() => Advertiser, { nullable: true, onDelete: "CASCADE" })
+  @JoinColumn({ name: "advertiser_id" })
+  advertiser: Advertiser | null;
+
+  @Column({ name: "advertiser_id", type: "uuid", nullable: true })
+  advertiserId: string | null;
 
   // RNF01: SHA-256 em hexadecimal. O token em si nunca é gravado.
   @Column({ name: "token_hash", type: "char", length: 64, unique: true })

@@ -7,6 +7,12 @@ import {
   EducationLevel,
   ProfileVisibility,
 } from "@/modules/student/types/StudentEnums";
+import { Advertiser } from "@/modules/advertiser/schema/Advertiser.schema";
+import { Responsible } from "@/modules/advertiser/schema/Responsible.schema";
+import {
+  AdvertiserType,
+  VerificationStatus,
+} from "@/modules/advertiser/types/AdvertiserEnums";
 
 export const DEFAULT_PASSWORD = "SenhaForte123";
 
@@ -74,4 +80,45 @@ export async function createStudent(
   });
 
   return repo.save(student);
+}
+
+// RF20: anunciante + primeiro responsável, como o cadastro real cria.
+export async function createAdvertiser(
+  ds: DataSource,
+  hasher: IPasswordHasher,
+  overrides: {
+    type?: AdvertiserType;
+    document?: string;
+    displayName?: string;
+    legalName?: string | null;
+    email?: string;
+    password?: string;
+    verification?: VerificationStatus;
+  } = {},
+): Promise<{ advertiser: Advertiser; responsible: Responsible }> {
+  const advertiser = await ds.getRepository(Advertiser).save(
+    ds.getRepository(Advertiser).create({
+      type: overrides.type ?? AdvertiserType.COMPANY,
+      // CNPJ válido pelo dígito verificador.
+      document: overrides.document ?? "11222333000181",
+      displayName: overrides.displayName ?? "Padaria Teste",
+      legalName: overrides.legalName ?? "Padaria Teste LTDA",
+      contactEmail: "contato@test.local",
+      contactPhone: "67999999999",
+      site: null,
+      verification: overrides.verification ?? VerificationStatus.PENDING,
+    }),
+  );
+
+  const responsible = await ds.getRepository(Responsible).save(
+    ds.getRepository(Responsible).create({
+      advertiserId: advertiser.id,
+      name: "Responsável Teste",
+      email: overrides.email ?? `resp_${nextSuffix()}@test.local`,
+      passwordHash: await hasher.hash(overrides.password ?? DEFAULT_PASSWORD),
+      active: true,
+    }),
+  );
+
+  return { advertiser, responsible };
 }

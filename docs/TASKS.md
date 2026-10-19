@@ -69,7 +69,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 08 | Cursos | RF33 | 02 | **Fechada** |
 | 09 | Formações do candidato | RF11, RN-C2, RN-C4 | 04, 08 | **Fechada** |
 | S1 | Swagger gerado do Zod | — | 09 | **Fechada** |
-| 10 | Anunciante e responsável | RF20, RF22, RF23, RN-VG8 | 06, 07 | A fazer |
+| 10 | Anunciante e responsável | RF20, RF22, RF23, RN-VG8 | 06, 07 | **Fechada** |
 | 11 | Verificação de anunciantes | RF21, RF30, RN-V1 a RN-V5 | 10 | A fazer |
 | 12 | Preço de vagas e configuração | RF39, RF40, RN-P8 | 02 | A fazer |
 | 13 | Vagas: rascunho, revisão e publicação | RF24, RF25, RF29, RN-VG1 a RN-VG9, RN-P5 | 10, 12 | A fazer |
@@ -103,7 +103,7 @@ Além das pendências P4 a P9 do SRS (seção 9.2), o próprio documento tem tr�
 
 | ID | Questão | Trava | Observação |
 |----|---------|-------|------------|
-| **D1** | **Tabela única de usuários?** A v4.9 (seção 6) unifica todos os perfis numa `USUARIO`, para resolver o e-mail único e dar FK real à sessão. O código tem `students` e `admins` separados, com `EmailRegistry` resolvendo a unicidade e `sessions.account_id` polimórfico (sem FK, contra a RNF06). | 04, 10 | Manter separado custa a FK da sessão; unificar custa migrar os dois módulos existentes. Decidir **antes** da task 10, quando o terceiro perfil entra. |
+| ~~**D1**~~ | ~~Tabela única de usuários?~~ **Resolvida em 18/10/2026: perfis seguem separados.** | — | Medido antes de decidir: a abstração `IAuthAccountProvider` absorveu o terceiro perfil a baixo custo (um arquivo de provider, uma linha no `EmailRegistry`, dois registros no container) — a estimativa anterior de "multiplica em três lugares" estava **errada**. **Dívida aceita:** `sessions.account_id` e `single_use_tokens.account_id` seguem sem FK, contra a RNF06. Reavaliar se um quarto perfil aparecer. |
 | ~~**D2**~~ | ~~Idade mínima: 14 ou 16?~~ **Resolvida em 17/10/2026: 14 anos (RN-C1).** | — | `MIN_AGE_YEARS = 14`. **A história de usuário da seção 7 do SRS ficou desatualizada** ("menor de 16 recusado") e precisa ser corrigida no documento. A P4 (conferência jurídica) segue aberta; mudar é uma linha. |
 | ~~**D3**~~ | ~~O admin vê o CPF completo?~~ **Resolvida em 17/10/2026: sim, Anexo A.** | — | `maskCpf` saiu da listagem do admin. O helper continua e passa a ser a trava do **anunciante** (RNF03) nas tasks 17 e 18; tem teste de unidade para não apodrecer sem uso. |
 
@@ -374,6 +374,18 @@ Recuperação de senha, convite de responsável e troca de e-mail dependem de en
 ---
 
 # TASK 10: Anunciante e responsável
+
+> **Status: fechada (18/10/2026).** 30 testes novos; suíte em 168. Swagger em 31 operações.
+>
+> Entregue: tabelas `advertisers` e `responsibles`, cadastro conjunto em transação (RF20), convite por e-mail com link de 72 h (RF22), edição com reset de verificação (RF23), RN-VG8 com lock, e o perfil `RESPONSIBLE` plugado em login, bloqueio por tentativas, recuperação de senha e troca de e-mail — só por implementar `IAuthAccountProvider`.
+>
+> **D1 resolvida aqui.** Medi antes de decidir e minha estimativa anterior estava errada: o terceiro perfil custou um arquivo de provider, uma linha no `EmailRegistry` e dois registros no container. Os 25 arquivos que citam `AccountRole` apenas usam o enum e não crescem. A dívida aceita é a FK ausente em `sessions` e `single_use_tokens`.
+>
+> **`advertiser_id` nos tokens entrou agora, com a FK** — foi exatamente por isso que ficou de fora na task 06.
+>
+> **Coluna adiantada:** `verification_requested_at`, que não está no modelo da v4.9. Sem ela não dá para medir o tempo de fila de verificação, e o selo só vale enquanto a fila anda. Custou uma coluna agora em vez de uma migration na task 11.
+>
+> **Validação de documentos extraída** para `shared/validators/documents.ts`, com CPF (que estava embutido no validator do candidato) e CNPJ. Conferir dígito não prova que o documento existe — isso é a verificação do admin (RN-V2/V3); o que a checagem faz é barrar erro de digitação antes de ocupar um documento único.
 
 ## Contexto
 Entra o terceiro perfil. **A decisão D1 precisa estar tomada antes desta task** — é aqui que manter três tabelas de conta separadas fica caro.

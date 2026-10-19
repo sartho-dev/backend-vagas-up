@@ -23,6 +23,12 @@ import {
   createAdminSchema,
   updateOwnProfileSchema,
 } from "../../modules/admin/validators/adminValidator";
+import {
+  acceptInviteSchema,
+  inviteResponsibleSchema,
+  registerAdvertiserSchema,
+  updateAdvertiserSchema,
+} from "../../modules/advertiser/validators/AdvertiserValidator";
 
 // Os corpos de requisição são GERADOS dos mesmos schemas Zod que validam.
 //
@@ -52,6 +58,12 @@ const requestSchemas = {
   // cursos
   CreateCourse: createCourseSchema,
   UpdateCourse: updateCourseSchema,
+
+  // anunciante
+  RegisterAdvertiser: registerAdvertiserSchema,
+  UpdateAdvertiser: updateAdvertiserSchema,
+  InviteResponsible: inviteResponsibleSchema,
+  AcceptInvite: acceptInviteSchema,
 
   // administração
   CreateAdmin: createAdminSchema,

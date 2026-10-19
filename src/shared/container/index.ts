@@ -34,6 +34,13 @@ import { Formation } from "../../modules/formation/schema/Formation.schema";
 import { FormationRepository } from "../../modules/formation/repository/FormationRepository";
 import { FormationService } from "../../modules/formation/service/FormationService";
 import { FormationController } from "../../modules/formation/controller/FormationController";
+import { Advertiser } from "../../modules/advertiser/schema/Advertiser.schema";
+import { Responsible } from "../../modules/advertiser/schema/Responsible.schema";
+import { AdvertiserRepository } from "../../modules/advertiser/repository/AdvertiserRepository";
+import { ResponsibleRepository } from "../../modules/advertiser/repository/ResponsibleRepository";
+import { ResponsibleAuthProvider } from "../../modules/advertiser/providers/ResponsibleAuthProvider";
+import { AdvertiserService } from "../../modules/advertiser/service/AdvertiserService";
+import { AdvertiserController } from "../../modules/advertiser/controller/AdvertiserController";
 import { EmailRegistry, IEmailLookup } from "../services/EmailRegistry";
 import {
   BcryptPasswordHasher,
@@ -68,6 +75,12 @@ export function buildContainer(options: ContainerOptions = {}) {
   const adminRepository = new AdminRepository(
     AppDataSource.getRepository(Admin),
   );
+  const advertiserRepository = new AdvertiserRepository(
+    AppDataSource.getRepository(Advertiser),
+  );
+  const responsibleRepository = new ResponsibleRepository(
+    AppDataSource.getRepository(Responsible),
+  );
 
   // RN06: one email, one account, across every kind of account. When the
   // responsible module exists, add its repository to this map.
@@ -75,6 +88,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     new Map<AccountRole, IEmailLookup>([
       [AccountRole.STUDENT, studentRepository],
       [AccountRole.ADMIN, adminRepository],
+      [AccountRole.RESPONSIBLE, responsibleRepository],
     ]),
   );
 
@@ -83,6 +97,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     [
       new StudentAuthProvider(studentRepository),
       new AdminAuthProvider(adminRepository),
+      new ResponsibleAuthProvider(responsibleRepository),
     ],
     new SessionRepository(AppDataSource.getRepository(Session)),
     hasher,
@@ -91,6 +106,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     [
       new StudentAuthProvider(studentRepository),
       new AdminAuthProvider(adminRepository),
+      new ResponsibleAuthProvider(responsibleRepository),
     ],
     singleUseTokens,
     emailRegistry,
@@ -107,6 +123,17 @@ export function buildContainer(options: ContainerOptions = {}) {
   const formationController = new FormationController(
     new FormationService(
       new FormationRepository(AppDataSource.getRepository(Formation)),
+    ),
+  );
+
+  const advertiserController = new AdvertiserController(
+    new AdvertiserService(
+      advertiserRepository,
+      emailRegistry,
+      hasher,
+      singleUseTokens,
+      emailSender,
+      responsibleRepository,
     ),
   );
 
@@ -140,6 +167,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     recoveryController,
     courseController,
     formationController,
+    advertiserController,
     adminController,
     authenticate,
   };
