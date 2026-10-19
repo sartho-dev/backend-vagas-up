@@ -30,6 +30,10 @@ import { Course } from "../../modules/course/schema/Course.schema";
 import { CourseRepository } from "../../modules/course/repository/CourseRepository";
 import { CourseService } from "../../modules/course/service/CourseService";
 import { CourseController } from "../../modules/course/controller/CourseController";
+import { Formation } from "../../modules/formation/schema/Formation.schema";
+import { FormationRepository } from "../../modules/formation/repository/FormationRepository";
+import { FormationService } from "../../modules/formation/service/FormationService";
+import { FormationController } from "../../modules/formation/controller/FormationController";
 import { EmailRegistry, IEmailLookup } from "../services/EmailRegistry";
 import {
   BcryptPasswordHasher,
@@ -100,6 +104,12 @@ export function buildContainer(options: ContainerOptions = {}) {
     new CourseService(new CourseRepository(AppDataSource.getRepository(Course))),
   );
 
+  const formationController = new FormationController(
+    new FormationService(
+      new FormationRepository(AppDataSource.getRepository(Formation)),
+    ),
+  );
+
   const authController = new AuthController(authService);
   const authenticate = makeAuthenticate(authService);
 
@@ -129,6 +139,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     authController,
     recoveryController,
     courseController,
+    formationController,
     adminController,
     authenticate,
   };

@@ -68,6 +68,10 @@ Rotas do próprio perfil:
 | `GET /api/v1/students/me` | perfil próprio, **com CPF completo** (Anexo A) |
 | `PATCH /api/v1/students/me` | nome, telefones, cidade, escolaridade, visibilidade, perfil profissional |
 | `PATCH /api/v1/students/me/password` | troca de senha; exige a atual e **encerra todas as sessões** (RN-A3) |
+| `GET/POST /api/v1/students/me/formations` | formações do candidato (RF11) |
+| `PATCH/DELETE /api/v1/students/me/formations/:id` | edita ou remove uma formação |
+
+As formações ficam sob `/me` de propósito: o dono vem da sessão, então **não existe caminho para alcançar a formação de outra pessoa**. A posse é filtro de banco (`WHERE student_id = :sessão`), não checagem no service — e por isso a formação alheia responde 404, não 403: dentro do escopo `/me` ela não existe, e um 403 confirmaria que aquele id existe em algum lugar.
 
 Trocar o e-mail **não** passa pelo perfil: tem fluxo próprio, com confirmação.
 
@@ -120,6 +124,18 @@ Duas garantias que valem conhecer antes de mexer:
 - **Um pedido novo invalida o anterior** do mesmo tipo e destinatário (RN-A6). Token inexistente, já usado e expirado são indistinguíveis para quem chama — qualquer diferença viraria um oráculo.
 
 O envio passa por `IEmailSender`. Sem `SMTP_HOST` e `SMTP_USER` configurados, o container escolhe o `ConsoleEmailSender`, que escreve o e-mail no log — assim o primeiro `npm run dev` numa máquina nova não quebra no fluxo de recuperação. Os testes injetam o `TestEmailSender`, que guarda em memória.
+
+---
+
+## Documentação da API
+
+O Swagger fica em http://localhost:3001/api-docs e cobre as 24 rotas.
+
+**Os corpos de requisição são gerados dos mesmos schemas Zod que validam**, via `z.toJSONSchema` (Zod 4, alvo `openapi-3.0`), registrados em [`src/shared/docs/components.ts`](src/shared/docs/components.ts). Documentação escrita à mão mente em silêncio — alguém muda o validator, o comentário fica para trás, e o front confia no que está errado. Gerando da mesma fonte, a divergência deixa de ser possível.
+
+O que o Zod não sabe — caminho, método, respostas de erro, quem precisa de token — fica em anotações `@swagger` junto de cada rota.
+
+**Rota nova sem documentação quebra a suíte.** O teste `test/shared/swagger-coverage.test.ts` conta as rotas registradas no Express e compara com as operações documentadas. Ele não aponta qual ficou de fora (o Express 5 não expõe o prefixo de montagem de forma estável), mas falha com a contagem e o diff do commit mostra na hora.
 
 ---
 
