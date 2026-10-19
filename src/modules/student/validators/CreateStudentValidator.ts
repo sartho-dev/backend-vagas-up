@@ -5,6 +5,7 @@ import {
   MIN_AGE_YEARS,
 } from "../../../shared/services/CalculatorBirthDate";
 import { config } from "../../../shared/config";
+import { isValidCpf } from "../../../shared/validators/documents";
 import {
   EducationLevel,
   ProfileVisibility,
@@ -14,27 +15,6 @@ import {
 // ============================================================================
 // Reusable primitive schemas (Create + Update)
 // ============================================================================
-
-// Real CPF check: 11 digits, not a repeated sequence, valid check digits.
-function isValidCpf(cpf: string): boolean {
-  if (/^(\d)\1{10}$/.test(cpf)) return false;
-
-  const checkDigit = (base: string, firstWeight: number): number => {
-    let weight = firstWeight;
-    let sum = 0;
-    for (const digit of base) {
-      sum += Number(digit) * weight;
-      weight -= 1;
-    }
-    const remainder = (sum * 10) % 11;
-    return remainder === 10 ? 0 : remainder;
-  };
-
-  return (
-    checkDigit(cpf.slice(0, 9), 10) === Number(cpf[9]) &&
-    checkDigit(cpf.slice(0, 10), 11) === Number(cpf[10])
-  );
-}
 
 // RN06 / RNF03: CPF as 11 digits, no punctuation
 export const cpfSchema = z

@@ -25,6 +25,7 @@ export class SingleUseTokenRepository implements ISingleUseTokenRepository {
         targetEmail: data.targetEmail,
         accountType: data.accountType,
         accountId: data.accountId,
+        advertiserId: data.advertiserId ?? null,
         tokenHash: data.tokenHash,
         expiresAt: data.expiresAt,
         usedAt: null,

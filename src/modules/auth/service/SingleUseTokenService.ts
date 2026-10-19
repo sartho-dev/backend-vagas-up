@@ -12,6 +12,7 @@ export type IssueParams = {
   targetEmail: string;
   accountType?: AccountRole | null;
   accountId?: string | null;
+  advertiserId?: string | null;
 };
 
 // Validade por tipo. A RN-A6 fixa 30 min para recuperação; o RF22 fixa 72 h
@@ -40,6 +41,7 @@ export class SingleUseTokenService {
       targetEmail: params.targetEmail,
       accountType: params.accountType ?? null,
       accountId: params.accountId ?? null,
+      advertiserId: params.advertiserId ?? null,
       tokenHash: hashToken(raw),
       expiresAt: new Date(now.getTime() + TTL_MS[params.type]),
     });

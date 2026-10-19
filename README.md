@@ -59,6 +59,8 @@ A senha segue a RN-A5 (10 a 64 caracteres, limite de 72 bytes do bcrypt).
 | `POST /api/v1/students` | público (cadastro) |
 | `/api/v1/students/me/*` | candidatos apenas |
 | `GET /api/v1/courses` | público (lista de cursos) |
+| `POST /api/v1/advertisers` | público (cadastro de anunciante) |
+| `/api/v1/advertisers/me/*` | responsáveis apenas |
 | `/api/v1/admin/*` | administradores apenas |
 
 Rotas do próprio perfil:
@@ -126,6 +128,15 @@ Duas garantias que valem conhecer antes de mexer:
 O envio passa por `IEmailSender`. Sem `SMTP_HOST` e `SMTP_USER` configurados, o container escolhe o `ConsoleEmailSender`, que escreve o e-mail no log — assim o primeiro `npm run dev` numa máquina nova não quebra no fluxo de recuperação. Os testes injetam o `TestEmailSender`, que guarda em memória.
 
 ---
+
+### Anunciante e responsável
+
+O **anunciante não faz login** — quem entra no sistema são seus **responsáveis** (um anunciante pode ter vários; cada responsável pertence a um só). Por isso as rotas são `/advertisers/me`: o vínculo vem da sessão do responsável.
+
+- O documento é validado pelo dígito verificador — CNPJ para PJ, CPF para PF — e é único. Isso é o que impede a mesma empresa de ter dois cadastros e usar a vaga gratuita duas vezes (RN-P1).
+- Todo anunciante nasce **pendente** de verificação (RN-V1) e, até ser verificado, só publica a vaga gratuita (RN-V4).
+- **Trocar o nome de exibição ou a razão social de um anunciante verificado o devolve para pendente** (RF23): o selo foi dado àquele nome, senão bastaria ser verificado como padaria e virar financeira.
+- O anunciante precisa ter sempre ao menos um responsável ativo (RN-VG8). Para encerrar, desativa-se o anunciante.
 
 ## Documentação da API
 

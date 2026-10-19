@@ -8,6 +8,8 @@ const TABLES = [
   "sessions",
   "admins",
   "formations",
+  "responsibles",
+  "advertisers",
   "students",
   "courses",
 ] as const;
