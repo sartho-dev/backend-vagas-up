@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { passwordSchema } from "../../../shared/validators/passwordSchema";
 import { isValidCnpj, isValidCpf } from "../../../shared/validators/documents";
-import { AdvertiserType } from "../types/AdvertiserEnums";
+import { AdvertiserType, VerificationMethod } from "../types/AdvertiserEnums";
 
 const emailSchema = z
   .string()
@@ -33,12 +33,12 @@ const siteSchema = z
 const documentSchema = z
   .string()
   .trim()
-  .regex(/^\d+$/, "O documento deve conter apenas dígitos");
+  .regex(/^\d+$/, "O cnpj deve conter apenas dígitos");
 
 export const registerAdvertiserSchema = z
   .object({
     type: z.enum(AdvertiserType, { error: "Tipo inválido" }),
-    document: documentSchema,
+    cnpj: documentSchema,
     displayName: nameSchema,
     legalName: nameSchema.nullable().default(null),
     contactEmail: emailSchema,
@@ -57,9 +57,7 @@ export const registerAdvertiserSchema = z
     // O documento depende do tipo: CNPJ tem 14 dígitos, CPF tem 11, e cada
     // um tem seu cálculo de dígito verificador.
     const isCompany = data.type === AdvertiserType.COMPANY;
-    const valid = isCompany
-      ? isValidCnpj(data.document)
-      : isValidCpf(data.document);
+    const valid = isCompany ? isValidCnpj(data.cnpj) : isValidCpf(data.cnpj);
 
     if (!valid) {
       ctx.addIssue({
@@ -91,7 +89,10 @@ export const updateAdvertiserSchema = z
       .string()
       .trim()
       .max(255)
-      .refine((v) => v.startsWith("https://"), "O site deve começar com https://")
+      .refine(
+        (v) => v.startsWith("https://"),
+        "O site deve começar com https://",
+      )
       .nullable()
       .optional(),
   })
@@ -107,7 +108,11 @@ export const inviteResponsibleSchema = z
 
 export const acceptInviteSchema = z
   .object({
-    token: z.string().trim().min(20, "Token inválido").max(200, "Token inválido"),
+    token: z
+      .string()
+      .trim()
+      .min(20, "Token inválido")
+      .max(200, "Token inválido"),
     name: nameSchema,
     password: passwordSchema,
   })
@@ -116,6 +121,42 @@ export const acceptInviteSchema = z
 export const responsibleIdParamSchema = z.object({
   id: z.uuid("Id de responsável inválido"),
 });
+
+export const advertiserIdParamSchema = z.object({
+  id: z.uuid("Id de anunciante inválido"),
+});
+
+export const listVerificationQueueSchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .strict();
+
+// Decisão binária: sem "verify" não há método; sem "reject" não há motivo.
+// O discriminatedUnion força que só um dos dois apareça — um admin tentando
+// mandar { decision: "verify", reason: "..." } recebe 400 do Zod, não uma
+// decisão gravada com motivo órfão.
+export const decideVerificationSchema = z.discriminatedUnion("decision", [
+  z
+    .object({
+      decision: z.literal("verify"),
+      method: z.enum(VerificationMethod, { error: "Método inválido" }),
+    })
+    .strict(),
+  z
+    .object({
+      decision: z.literal("reject"),
+      reason: z
+        .string()
+        .trim()
+        .min(1, "Motivo é obrigatório")
+        .max(1000, "Motivo deve ter no máximo 1000 caracteres"),
+    })
+    .strict(),
+]);
+
+export type DecideVerificationInput = z.infer<typeof decideVerificationSchema>;
 
 export type RegisterAdvertiserInput = z.infer<typeof registerAdvertiserSchema>;
 export type UpdateAdvertiserInput = z.infer<typeof updateAdvertiserSchema>;

@@ -40,505 +40,1403 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
-modules/
-  admin/
-    deactivate-revokes.test.ts
-    last-active-race.test.ts
-  auth/
-    account-enumeration.test.ts
-    single-session.test.ts
-  student/
-    cpf-masked.test.ts
-setup/
-  env.ts
-  global-setup.ts
-  migrate.ts
-  truncate.ts
-utils/
-  app.ts
-  FakePasswordHasher.ts
-  fixtures.ts
-  TestEmailSender.ts
+controller/
+  AdvertiserController.ts
+  AdvertiserVerificationController.ts
+interfaces/
+  IAdvertiserRepository.ts
+  IResponsibleRepository.ts
+providers/
+  ResponsibleAuthProvider.ts
+repository/
+  AdvertiserRepository.ts
+  ResponsibleRepository.ts
+schema/
+  Advertiser.schema.ts
+  Responsible.schema.ts
+service/
+  AdvertiserService.ts
+  AdvertiserVerificationService.ts
+types/
+  AdvertiserEnums.ts
+  AdvertiserTypes.ts
+validators/
+  AdvertiserValidator.ts
+advertiserRoutes.ts
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path="modules/admin/deactivate-revokes.test.ts">
-// POR QUE EXISTE: RN21 diz que desativar uma conta encerra TODAS as sessões
-// dela. Sem `revokeAllSessions`, o admin desativado continuaria acessando
-// até o idle timeout — o que na prática significa até 30 minutos de acesso
-// indevido. Esse teste trava a garantia.
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+<file path="controller/AdvertiserController.ts">
+import { Request, Response } from "express";
+import { asyncHandler } from "../../../shared/middleware/asyncHandler";
+import { ApiResponse } from "../../../shared/types/ApiResponse";
+import { getAuth } from "../../auth/types/AccountRole";
+import { AdvertiserService } from "../service/AdvertiserService";
 import {
-  createTestContext,
-  TestContext,
-  loginAs,
-  authHeader,
-} from "../../utils/app";
-import { truncateAll } from "../../setup/truncate";
-import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
+  AdvertiserResult,
+  ResponsibleResult,
+} from "../types/AdvertiserTypes";
+import {
+  acceptInviteSchema,
+  inviteResponsibleSchema,
+  registerAdvertiserSchema,
+  responsibleIdParamSchema,
+  updateAdvertiserSchema,
+} from "../validators/AdvertiserValidator";
 
-let ctx: TestContext;
+export class AdvertiserController {
+  constructor(private advertisers: AdvertiserService) {}
 
-beforeAll(async () => {
-  ctx = await createTestContext();
-});
+  registerController = asyncHandler(async (req: Request, res: Response) => {
+    const input = registerAdvertiserSchema.parse(req.body);
 
-beforeEach(async () => {
-  await truncateAll();
-});
+    const data = await this.advertisers.registerService(input);
 
-describe("RN21 — desativar revoga as sessões do alvo", () => {
-  it("derruba a sessão do admin desativado imediatamente", async () => {
-    const actor = await createAdmin(ctx.dataSource, ctx.hasher, {
-      email: "actor@test.local",
-    });
-    const target = await createAdmin(ctx.dataSource, ctx.hasher, {
-      email: "target@test.local",
-    });
-
-    const actorAuth = await loginAs(ctx, "actor@test.local", DEFAULT_PASSWORD);
-    const targetAuth = await loginAs(
-      ctx,
-      "target@test.local",
-      DEFAULT_PASSWORD,
-    );
-
-    await ctx.request
-      .patch(`/api/v1/admin/administrators/${target.id}/deactivate`)
-      .set(authHeader(actorAuth.token))
-      .expect(200);
-
-    await ctx.request
-      .get("/api/v1/admin/administrators")
-      .set(authHeader(targetAuth.token))
-      .expect(401);
+    const response: ApiResponse = { status: "success", data };
+    res.status(201).json(response);
   });
-});
+
+  acceptInviteController = asyncHandler(async (req: Request, res: Response) => {
+    const input = acceptInviteSchema.parse(req.body);
+
+    const data = await this.advertisers.acceptInviteService(input);
+
+    const response: ApiResponse<ResponsibleResult> = {
+      status: "success",
+      data,
+    };
+    res.status(201).json(response);
+  });
+
+  getOwnController = asyncHandler(async (_req: Request, res: Response) => {
+    const { accountId } = getAuth(res);
+
+    const data = await this.advertisers.getOwnService(accountId);
+
+    const response: ApiResponse<AdvertiserResult> = {
+      status: "success",
+      data,
+    };
+    res.status(200).json(response);
+  });
+
+  updateOwnController = asyncHandler(async (req: Request, res: Response) => {
+    const input = updateAdvertiserSchema.parse(req.body);
+    const { accountId } = getAuth(res);
+
+    const data = await this.advertisers.updateOwnService(accountId, input);
+
+    const response: ApiResponse<AdvertiserResult> = {
+      status: "success",
+      data,
+    };
+    res.status(200).json(response);
+  });
+
+  listResponsiblesController = asyncHandler(
+    async (_req: Request, res: Response) => {
+      const { accountId } = getAuth(res);
+
+      const data = await this.advertisers.listOwnResponsiblesService(accountId);
+
+      const response: ApiResponse<ResponsibleResult[]> = {
+        status: "success",
+        data,
+      };
+      res.status(200).json(response);
+    },
+  );
+
+  inviteResponsibleController = asyncHandler(
+    async (req: Request, res: Response) => {
+      const { email } = inviteResponsibleSchema.parse(req.body);
+      const { accountId } = getAuth(res);
+
+      await this.advertisers.inviteOwnResponsibleService(accountId, email);
+
+      res.status(204).send();
+    },
+  );
+
+  deactivateResponsibleController = asyncHandler(
+    async (req: Request, res: Response) => {
+      const { id } = responsibleIdParamSchema.parse(req.params);
+      const { accountId } = getAuth(res);
+
+      await this.advertisers.deactivateOwnResponsibleService(accountId, id);
+
+      res.status(204).send();
+    },
+  );
+}
 </file>
 
-<file path="modules/admin/last-active-race.test.ts">
-// POR QUE EXISTE: RN21 proíbe ficar sem nenhum admin ativo. Duas requisições
-// simultâneas de desativação mútua só podem terminar com um vencedor. Sem o
-// lock pessimista do AdminRepository, as duas passariam pela checagem e o
-// sistema ficaria sem admin. É o bug que você não enxerga no Postman.
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { createTestContext, TestContext, loginAs, authHeader } from "../../utils/app";
-import { truncateAll } from "../../setup/truncate";
-import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
+<file path="controller/AdvertiserVerificationController.ts">
+import { Request, Response } from "express";
+import { asyncHandler } from "../../../shared/middleware/asyncHandler";
+import { ApiResponse } from "../../../shared/types/ApiResponse";
+import { AdvertiserVerificationService } from "../service/AdvertiserVerificationService";
+import { CnpjLookupReport } from "@/shared/types/VerificationTypes";
+import { advertiserIdParamSchema } from "../validators/AdvertiserValidator";
 
-let ctx: TestContext;
+export class AdvertiserVerificationController {
+  constructor(private verification: AdvertiserVerificationService) {}
 
-beforeAll(async () => {
-  ctx = await createTestContext();
-});
+  // RN-V2
+  cnpjLookupController = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = advertiserIdParamSchema.parse(req.params);
 
-beforeEach(async () => {
-  await truncateAll();
-});
+    const data = await this.verification.cnpjLookupService(id);
 
-describe("RN21 — corrida no último admin ativo", () => {
-  it.skip("apenas um de dois admins simultâneos consegue desativar o outro", async () => {
-    const a = await createAdmin(ctx.dataSource, ctx.hasher, { email: "a@test.local" });
-    const b = await createAdmin(ctx.dataSource, ctx.hasher, { email: "b@test.local" });
-
-    const authA = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
-    const authB = await loginAs(ctx, "b@test.local", DEFAULT_PASSWORD);
-
-    const [ra, rb] = await Promise.all([
-      ctx.request
-        .patch(`/api/v1/admin/administrators/${b.id}/deactivate`)
-        .set(authHeader(authA.token)),
-      ctx.request
-        .patch(`/api/v1/admin/administrators/${a.id}/deactivate`)
-        .set(authHeader(authB.token)),
-    ]);
-
-    const statuses = [ra.status, rb.status].sort();
-    expect(statuses).toEqual([200, 409]);
+    const response: ApiResponse<CnpjLookupReport> = { status: "success", data };
+    res.status(200).json(response);
   });
-});
+}
 </file>
 
-<file path="modules/auth/account-enumeration.test.ts">
-// POR QUE EXISTE: RN23 exige resposta idêntica para e-mail inexistente, senha
-// errada e conta desativada. Se um desses casos responder diferente, um
-// atacante descobre quem está cadastrado.
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { createTestContext, TestContext } from "../../utils/app";
-import { truncateAll } from "../../setup/truncate";
-import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
+<file path="interfaces/IAdvertiserRepository.ts">
+import { Advertiser } from "../schema/Advertiser.schema";
+import { Responsible } from "../schema/Responsible.schema";
+import { AdvertiserType } from "../types/AdvertiserEnums";
 
-let ctx: TestContext;
+export type RegisterAdvertiserData = {
+  type: AdvertiserType;
+  cnpj: string;
+  displayName: string;
+  legalName: string | null;
+  contactEmail: string;
+  contactPhone: string;
+  site: string | null;
+  firstResponsible: {
+    name: string;
+    email: string;
+    passwordHash: string;
+  };
+};
 
-beforeAll(async () => {
-  ctx = await createTestContext();
-});
+export type UpdateAdvertiserData = {
+  displayName?: string;
+  legalName?: string | null;
+  contactEmail?: string;
+  contactPhone?: string;
+  site?: string | null;
+};
 
-beforeEach(async () => {
-  await truncateAll();
-});
+// RN-VG8: tirar o último responsável ativo não pode deixar o anunciante sem
+// ninguém. O repositório informa o que aconteceu; o service escolhe o HTTP.
+export type DeactivateResponsibleOutcome =
+  | "deactivated"
+  | "not_found"
+  | "already_inactive"
+  | "last_active";
 
-describe("RN23 — login não revela se um e-mail está cadastrado", () => {
-  it.skip("responde igual para existente/inativa/inexistente", async () => {
-    await createAdmin(ctx.dataSource, ctx.hasher, {
-      email: "ativo@test.local",
-      active: true,
-    });
-    await createAdmin(ctx.dataSource, ctx.hasher, {
-      email: "inativa@test.local",
-      active: false,
-    });
+export interface IAdvertiserRepository {
+  // RF20: anunciante e primeiro responsável nascem na MESMA transação —
+  // um anunciante sem responsável seria inacessível para sempre.
+  register(
+    data: RegisterAdvertiserData,
+  ): Promise<{ advertiser: Advertiser; responsible: Responsible }>;
 
-    const cases = [
-      { email: "ativo@test.local", password: "SenhaErrada999" },
-      { email: "inativa@test.local", password: DEFAULT_PASSWORD },
-      { email: "naoexiste@test.local", password: DEFAULT_PASSWORD },
-    ];
+  findById(id: string): Promise<Advertiser | null>;
+  existsByDocument(cnpj: string): Promise<boolean>;
 
-    const responses = await Promise.all(
-      cases.map((body) => ctx.request.post("/api/v1/auth/login").send(body)),
+  // RF23: tipo e documento não entram. Devolve null se não existir.
+  update(id: string, data: UpdateAdvertiserData): Promise<Advertiser | null>;
+
+  // RF23: alterar nome ou razão social de um anunciante VERIFICADO o devolve
+  // para pendente — o selo foi dado àquele nome.
+  resetVerification(id: string): Promise<void>;
+
+  listResponsibles(advertiserId: string): Promise<Responsible[]>;
+  addResponsible(
+    advertiserId: string,
+    data: { name: string; email: string; passwordHash: string },
+  ): Promise<Responsible>;
+
+  deactivateResponsible(
+    id: string,
+    advertiserId: string,
+  ): Promise<DeactivateResponsibleOutcome>;
+}
+</file>
+
+<file path="interfaces/IResponsibleRepository.ts">
+import { Responsible } from "../schema/Responsible.schema";
+import { IEmailLookup } from "../../../shared/services/EmailRegistry";
+
+// Tudo o que a autenticação precisa de um perfil, mais o lookup de e-mail
+// da RN-A7. Mesmo contrato que `students` e `admins` já cumprem.
+export interface IResponsibleRepository extends IEmailLookup {
+  findByEmailWithPassword(email: string): Promise<Responsible | null>;
+  existsActiveById(id: string): Promise<boolean>;
+  findById(id: string): Promise<Responsible | null>;
+
+  recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void>;
+  clearLoginFailures(accountId: string): Promise<void>;
+
+  updatePassword(accountId: string, passwordHash: string): Promise<void>;
+  updateEmail(accountId: string, email: string): Promise<void>;
+}
+</file>
+
+<file path="providers/ResponsibleAuthProvider.ts">
+import {
+  IAuthAccountProvider,
+  LoginAccount,
+} from "../../auth/interfaces/IAuthAccountProvider";
+import { AccountRole } from "../../auth/types/AccountRole";
+import { IResponsibleRepository } from "../interfaces/IResponsibleRepository";
+
+// Terceiro perfil a entrar na autenticação. Note que não há regra nova
+// aqui: login, bloqueio por tentativas (RN-A4), recuperação de senha
+// (RN-A6) e troca de e-mail (RF03) passam a valer para o responsável só
+// por implementar esta interface e registrar o provider no container.
+export class ResponsibleAuthProvider implements IAuthAccountProvider {
+  readonly role = AccountRole.RESPONSIBLE;
+
+  constructor(private responsibles: IResponsibleRepository) {}
+
+  async findForLogin(email: string): Promise<LoginAccount | null> {
+    const account = await this.responsibles.findByEmailWithPassword(email);
+
+    return account
+      ? {
+          id: account.id,
+          passwordHash: account.passwordHash,
+          failedLogins: account.failedLogins,
+          blockedUntil: account.blockedUntil,
+        }
+      : null;
+  }
+
+  async isActive(accountId: string): Promise<boolean> {
+    return await this.responsibles.existsActiveById(accountId);
+  }
+
+  async recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void> {
+    await this.responsibles.recordLoginFailure(
+      accountId,
+      failedLogins,
+      blockedUntil,
     );
+  }
 
-    for (const res of responses) {
-      expect(res.status).toBe(401);
+  async clearLoginFailures(accountId: string): Promise<void> {
+    await this.responsibles.clearLoginFailures(accountId);
+  }
+
+  async updatePassword(accountId: string, passwordHash: string): Promise<void> {
+    await this.responsibles.updatePassword(accountId, passwordHash);
+  }
+
+  async updateEmail(accountId: string, email: string): Promise<void> {
+    await this.responsibles.updateEmail(accountId, email);
+  }
+}
+</file>
+
+<file path="repository/AdvertiserRepository.ts">
+import { Repository } from "typeorm";
+import { Advertiser } from "../schema/Advertiser.schema";
+import { Responsible } from "../schema/Responsible.schema";
+import {
+  DeactivateResponsibleOutcome,
+  IAdvertiserRepository,
+  RegisterAdvertiserData,
+  UpdateAdvertiserData,
+} from "../interfaces/IAdvertiserRepository";
+import { VerificationStatus } from "../types/AdvertiserEnums";
+import { AppError } from "../../../shared/errors/AppError";
+
+// 23505 = unique_violation. Documento e e-mail têm constraint no banco; a
+// checagem prévia do service é só a resposta amigável, e esta tradução
+// cobre a corrida entre duas requisições simultâneas.
+function rethrowUniqueViolation(error: unknown): never {
+  const detail = (error as { code?: string; detail?: string }) ?? {};
+
+  if (detail.code === "23505") {
+    if (detail.detail?.includes("document")) {
+      throw new AppError("Documento já cadastrado", 409);
+    }
+    throw new AppError("E-mail já está em uso", 409);
+  }
+
+  throw error;
+}
+
+export class AdvertiserRepository implements IAdvertiserRepository {
+  constructor(private repository: Repository<Advertiser>) {}
+
+  async register(data: RegisterAdvertiserData) {
+    try {
+      return await this.repository.manager.transaction(async (tm) => {
+        const advertiser = await tm.save(
+          tm.create(Advertiser, {
+            type: data.type,
+            document: data.cnpj,
+            displayName: data.displayName,
+            legalName: data.legalName,
+            contactEmail: data.contactEmail,
+            contactPhone: data.contactPhone,
+            site: data.site,
+            // RN-V1
+            verification: VerificationStatus.PENDING,
+          }),
+        );
+
+        const responsible = await tm.save(
+          tm.create(Responsible, {
+            advertiserId: advertiser.id,
+            ...data.firstResponsible,
+          }),
+        );
+
+        return { advertiser, responsible };
+      });
+    } catch (error) {
+      rethrowUniqueViolation(error);
+    }
+  }
+
+  async findById(id: string): Promise<Advertiser | null> {
+    return await this.repository.findOne({ where: { id } });
+  }
+
+  async existsByDocument(cnpj: string): Promise<boolean> {
+    return await this.repository.exists({ where: { cnpj } });
+  }
+
+  async update(
+    id: string,
+    data: UpdateAdvertiserData,
+  ): Promise<Advertiser | null> {
+    const result = await this.repository.update({ id }, data);
+    if (result.affected === 0) return null;
+
+    return await this.findById(id);
+  }
+
+  async resetVerification(id: string): Promise<void> {
+    await this.repository.update(
+      { id },
+      {
+        verification: VerificationStatus.PENDING,
+        verifiedAt: null,
+        verifiedBy: null,
+        verificationMethod: null,
+      },
+    );
+  }
+
+  async listResponsibles(advertiserId: string): Promise<Responsible[]> {
+    return await this.repository.manager.find(Responsible, {
+      where: { advertiserId },
+      order: { createdAt: "ASC" },
+    });
+  }
+
+  async addResponsible(
+    advertiserId: string,
+    data: { name: string; email: string; passwordHash: string },
+  ): Promise<Responsible> {
+    try {
+      return await this.repository.manager.save(
+        this.repository.manager.create(Responsible, { advertiserId, ...data }),
+      );
+    } catch (error) {
+      rethrowUniqueViolation(error);
+    }
+  }
+
+  // RN-VG8, com a mesma defesa do "último admin ativo" (RF34): travar as
+  // linhas ativas em ordem fixa faz duas desativações simultâneas entrarem
+  // em fila, e a segunda enxerga o conjunto já reduzido.
+  async deactivateResponsible(
+    id: string,
+    advertiserId: string,
+  ): Promise<DeactivateResponsibleOutcome> {
+    return await this.repository.manager.transaction(async (tm) => {
+      const activeOnes = await tm.find(Responsible, {
+        select: { id: true },
+        where: { advertiserId, active: true },
+        order: { id: "ASC" },
+        lock: { mode: "pessimistic_write" },
+      });
+
+      // Lido DEPOIS do lock: é o estado atual, não um anterior.
+      const target = await tm.findOne(Responsible, {
+        select: { id: true, active: true },
+        where: { id, advertiserId },
+      });
+
+      if (!target) return "not_found";
+      if (!target.active) return "already_inactive";
+      if (activeOnes.length <= 1) return "last_active";
+
+      await tm.update(Responsible, { id }, { active: false });
+
+      return "deactivated";
+    });
+  }
+}
+</file>
+
+<file path="repository/ResponsibleRepository.ts">
+import { Not, Repository } from "typeorm";
+import { Responsible } from "../schema/Responsible.schema";
+import { IResponsibleRepository } from "../interfaces/IResponsibleRepository";
+
+export class ResponsibleRepository implements IResponsibleRepository {
+  constructor(private repository: Repository<Responsible>) {}
+
+  // RF01: o único lugar que devolve o hash, junto com o estado do bloqueio
+  // (RN-A4). Só contas ATIVAS — conta desativada não entra.
+  async findByEmailWithPassword(email: string): Promise<Responsible | null> {
+    return await this.repository.findOne({
+      where: { email, active: true },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        active: true,
+        failedLogins: true,
+        blockedUntil: true,
+      },
+    });
+  }
+
+  async existsActiveById(id: string): Promise<boolean> {
+    return await this.repository.exists({ where: { id, active: true } });
+  }
+
+  async findById(id: string): Promise<Responsible | null> {
+    return await this.repository.findOne({ where: { id } });
+  }
+
+  // RN-A7: inclui desativados de propósito — o e-mail continua ocupado.
+  async existsByEmail(email: string): Promise<boolean> {
+    return await this.repository.exists({ where: { email } });
+  }
+
+  async isEmailTakenByOther(
+    email: string,
+    accountId: string,
+  ): Promise<boolean> {
+    return await this.repository.exists({
+      where: { email, id: Not(accountId) },
+    });
+  }
+
+  async recordLoginFailure(
+    accountId: string,
+    failedLogins: number,
+    blockedUntil: Date | null,
+  ): Promise<void> {
+    await this.repository.update({ id: accountId }, { failedLogins, blockedUntil });
+  }
+
+  async clearLoginFailures(accountId: string): Promise<void> {
+    await this.repository.update(
+      { id: accountId },
+      { failedLogins: 0, blockedUntil: null },
+    );
+  }
+
+  async updatePassword(accountId: string, passwordHash: string): Promise<void> {
+    await this.repository.update({ id: accountId }, { passwordHash });
+  }
+
+  async updateEmail(accountId: string, email: string): Promise<void> {
+    await this.repository.update({ id: accountId }, { email });
+  }
+}
+</file>
+
+<file path="schema/Advertiser.schema.ts">
+import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { AdvertiserType, VerificationStatus } from "../types/AdvertiserEnums";
+
+// RF20: quem publica vagas. NÃO faz login — quem entra no sistema são os
+// responsáveis (SRS 1.3). Por isso não há senha nem sessão aqui.
+@Entity("advertisers")
+export class Advertiser {
+  @PrimaryGeneratedColumn("uuid")
+  id: string;
+
+  @Column({ name: "type", type: "enum", enum: AdvertiserType })
+  type: AdvertiserType;
+
+  // CNPJ (14) ou CPF (11), só dígitos. Único no banco: é o que impede a
+  // mesma empresa de ter dois cadastros e burlar a vaga gratuita (RN-P1).
+  @Column({ name: "cpnj", type: "varchar", length: 14, unique: true })
+  cnpj: string;
+
+  @Column({ name: "display_name", type: "varchar", length: 150 })
+  displayName: string;
+
+  // Só PJ tem razão social.
+  @Column({ name: "legal_name", type: "varchar", length: 150, nullable: true })
+  legalName: string | null;
+
+  @Column({ name: "contact_email", type: "varchar", length: 255 })
+  contactEmail: string;
+
+  @Column({ name: "contact_phone", type: "varchar", length: 20 })
+  contactPhone: string;
+
+  @Column({ name: "site", type: "varchar", length: 255, nullable: true })
+  site: string | null;
+
+  @Column({
+    name: "verification",
+    type: "enum",
+    enum: VerificationStatus,
+    default: VerificationStatus.PENDING,
+  })
+  verification: VerificationStatus;
+
+  // Quando o pedido de verificação foi feito. Não está no modelo da v4.9,
+  // mas sem ele não dá para medir o tempo de fila — e o selo "Verificado"
+  // só vale enquanto a fila anda. Ver RF21/RF30 (task 11).
+  @Column({
+    name: "verification_requested_at",
+    type: "timestamptz",
+    nullable: true,
+  })
+  verificationRequestedAt: Date | null;
+
+  // RNF07: quem decidiu, quando e por qual método (RN-V2/V3).
+  @Column({ name: "verified_by", type: "uuid", nullable: true })
+  verifiedBy: string | null;
+
+  @Column({ name: "verified_at", type: "timestamptz", nullable: true })
+  verifiedAt: Date | null;
+
+  @Column({
+    name: "verification_method",
+    type: "varchar",
+    length: 150,
+    nullable: true,
+  })
+  verificationMethod: string | null;
+
+  @Column({ name: "rejection_reason", type: "text", nullable: true })
+  rejectionReason: string | null;
+
+  @Column({ name: "active", type: "boolean", default: true })
+  active: boolean;
+
+  @Column({ name: "created_at", type: "timestamptz", default: () => "now()" })
+  createdAt: Date;
+}
+</file>
+
+<file path="schema/Responsible.schema.ts">
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from "typeorm";
+import { Advertiser } from "./Advertiser.schema";
+
+// RF20/RF22: pessoa que entra no sistema em nome de um anunciante. Um
+// anunciante pode ter vários (dono e RH, por exemplo); cada responsável
+// pertence a um único anunciante.
+//
+// É a TERCEIRA tabela de conta do projeto, ao lado de `students` e
+// `admins` — decisão D1, registrada no TASKS.md: os perfis seguem
+// separados, com o EmailRegistry garantindo e-mail único entre eles.
+@Entity("responsibles")
+@Index(["advertiserId"])
+export class Responsible {
+  @PrimaryGeneratedColumn("uuid")
+  id: string;
+
+  // RESTRICT e não CASCADE: anunciante com responsável não é apagado, é
+  // desativado (RNF06).
+  @ManyToOne(() => Advertiser, { nullable: false, onDelete: "RESTRICT" })
+  @JoinColumn({ name: "advertiser_id" })
+  advertiser: Advertiser;
+
+  @Column({ name: "advertiser_id", type: "uuid" })
+  advertiserId: string;
+
+  @Column({ name: "name", type: "varchar", length: 150 })
+  name: string;
+
+  // RN-A7: único aqui e, via EmailRegistry, entre todos os perfis.
+  @Column({ name: "email", type: "varchar", length: 255, unique: true })
+  email: string;
+
+  @Column({
+    name: "password_hash",
+    type: "varchar",
+    length: 255,
+    select: false,
+  })
+  passwordHash: string;
+
+  @Column({ name: "active", type: "boolean", default: true })
+  active: boolean;
+
+  // RN-A4: mesmo bloqueio por tentativas dos outros perfis.
+  @Column({ name: "failed_logins", type: "int", default: 0 })
+  failedLogins: number;
+
+  @Column({ name: "blocked_until", type: "timestamptz", nullable: true })
+  blockedUntil: Date | null;
+
+  @Column({ name: "created_at", type: "timestamptz", default: () => "now()" })
+  createdAt: Date;
+}
+</file>
+
+<file path="service/AdvertiserService.ts">
+import { AppError } from "../../../shared/errors/AppError";
+import { EmailRegistry } from "../../../shared/services/EmailRegistry";
+import { IEmailSender } from "../../../shared/services/EmailSender";
+import { IPasswordHasher } from "../../../shared/services/PasswordHasher";
+import { config } from "../../../shared/config";
+import { AccountRole } from "../../auth/types/AccountRole";
+import { TokenType } from "../../auth/types/TokenType";
+import { SingleUseTokenService } from "../../auth/service/SingleUseTokenService";
+import { IAdvertiserRepository } from "../interfaces/IAdvertiserRepository";
+import { IResponsibleRepository } from "../interfaces/IResponsibleRepository";
+import { Advertiser } from "../schema/Advertiser.schema";
+import { Responsible } from "../schema/Responsible.schema";
+import { AdvertiserResult, ResponsibleResult } from "../types/AdvertiserTypes";
+import { VerificationStatus } from "../types/AdvertiserEnums";
+import {
+  AcceptInviteInput,
+  RegisterAdvertiserInput,
+  UpdateAdvertiserInput,
+} from "../validators/AdvertiserValidator";
+
+function toAdvertiserResult(advertiser: Advertiser): AdvertiserResult {
+  return {
+    id: advertiser.id,
+    type: advertiser.type,
+    cnpj: advertiser.cnpj,
+    displayName: advertiser.displayName,
+    legalName: advertiser.legalName,
+    contactEmail: advertiser.contactEmail,
+    contactPhone: advertiser.contactPhone,
+    site: advertiser.site,
+    verification: advertiser.verification,
+    active: advertiser.active,
+  };
+}
+
+function toResponsibleResult(responsible: Responsible): ResponsibleResult {
+  return {
+    id: responsible.id,
+    name: responsible.name,
+    email: responsible.email,
+    active: responsible.active,
+  };
+}
+
+const INVALID_INVITE = "Convite inválido ou expirado";
+
+export class AdvertiserService {
+  constructor(
+    private repository: IAdvertiserRepository,
+    private emails: EmailRegistry,
+    private hasher: IPasswordHasher,
+    private tokens: SingleUseTokenService,
+    private mailer: IEmailSender,
+    private responsibles: IResponsibleRepository,
+  ) {}
+
+  // A sessão identifica o RESPONSÁVEL; o anunciante vem do vínculo dele.
+  // Resolver aqui, e não no controller, garante que toda rota /me opere
+  // sobre o anunciante certo sem depender de quem chamou passar o id.
+  private async advertiserOf(responsibleId: string): Promise<string> {
+    const responsible = await this.responsibles.findById(responsibleId);
+
+    if (!responsible) {
+      throw new AppError("Responsável não encontrado", 404);
     }
 
-    for (const res of responses) {
-      expect(res.body).toEqual({
-        status: "error",
-        message: "E-mail ou senha inválidos",
+    return responsible.advertiserId;
+  }
+
+  async getOwnService(responsibleId: string): Promise<AdvertiserResult> {
+    return await this.getService(await this.advertiserOf(responsibleId));
+  }
+
+  async updateOwnService(
+    responsibleId: string,
+    data: UpdateAdvertiserInput,
+  ): Promise<AdvertiserResult> {
+    return await this.updateService(
+      await this.advertiserOf(responsibleId),
+      data,
+    );
+  }
+
+  async listOwnResponsiblesService(
+    responsibleId: string,
+  ): Promise<ResponsibleResult[]> {
+    return await this.listResponsiblesService(
+      await this.advertiserOf(responsibleId),
+    );
+  }
+
+  async inviteOwnResponsibleService(
+    responsibleId: string,
+    email: string,
+  ): Promise<void> {
+    await this.inviteResponsibleService(
+      await this.advertiserOf(responsibleId),
+      email,
+    );
+  }
+
+  async deactivateOwnResponsibleService(
+    responsibleId: string,
+    targetId: string,
+  ): Promise<void> {
+    await this.deactivateResponsibleService(
+      await this.advertiserOf(responsibleId),
+      responsibleId,
+      targetId,
+    );
+  }
+
+  // RF20
+  async registerService(
+    data: RegisterAdvertiserInput,
+  ): Promise<{ advertiser: AdvertiserResult; responsible: ResponsibleResult }> {
+    if (await this.repository.existsByDocument(data.cnpj)) {
+      throw new AppError("Documento já cadastrado", 409);
+    }
+
+    // RN-A7: o e-mail do responsável tem de ser único entre TODOS os
+    // perfis, não só entre responsáveis.
+    if (await this.emails.isTaken(data.firstResponsible.email)) {
+      throw new AppError("E-mail já está em uso", 409);
+    }
+
+    const passwordHash = await this.hasher.hash(data.firstResponsible.password);
+
+    const { advertiser, responsible } = await this.repository.register({
+      type: data.type,
+      cnpj: data.cnpj,
+      displayName: data.displayName,
+      legalName: data.legalName,
+      contactEmail: data.contactEmail,
+      contactPhone: data.contactPhone,
+      site: data.site,
+      firstResponsible: {
+        name: data.firstResponsible.name,
+        email: data.firstResponsible.email,
+        passwordHash,
+      },
+    });
+
+    return {
+      advertiser: toAdvertiserResult(advertiser),
+      responsible: toResponsibleResult(responsible),
+    };
+  }
+
+  async getService(advertiserId: string): Promise<AdvertiserResult> {
+    const advertiser = await this.repository.findById(advertiserId);
+
+    if (!advertiser) throw new AppError("Anunciante não encontrado", 404);
+
+    return toAdvertiserResult(advertiser);
+  }
+
+  // RF23
+  async updateService(
+    advertiserId: string,
+    data: UpdateAdvertiserInput,
+  ): Promise<AdvertiserResult> {
+    const current = await this.repository.findById(advertiserId);
+    if (!current) throw new AppError("Anunciante não encontrado", 404);
+
+    const updated = await this.repository.update(advertiserId, data);
+    if (!updated) throw new AppError("Anunciante não encontrado", 404);
+
+    // RF23: o selo foi concedido àquele nome. Se o nome muda, a verificação
+    // precisa ser refeita — senão bastaria cadastrar como padaria, ser
+    // verificado e virar financeira.
+    const nameChanged =
+      (data.displayName !== undefined &&
+        data.displayName !== current.displayName) ||
+      (data.legalName !== undefined && data.legalName !== current.legalName);
+
+    if (nameChanged && current.verification === VerificationStatus.VERIFIED) {
+      await this.repository.resetVerification(advertiserId);
+
+      return await this.getService(advertiserId);
+    }
+
+    return toAdvertiserResult(updated);
+  }
+
+  async listResponsiblesService(
+    advertiserId: string,
+  ): Promise<ResponsibleResult[]> {
+    const list = await this.repository.listResponsibles(advertiserId);
+
+    return list.map(toResponsibleResult);
+  }
+
+  // RF22: convite por e-mail, link de 72 h, o convidado define a senha.
+  async inviteResponsibleService(
+    advertiserId: string,
+    email: string,
+  ): Promise<void> {
+    if (await this.emails.isTaken(email)) {
+      throw new AppError("E-mail já está em uso", 409);
+    }
+
+    const advertiser = await this.repository.findById(advertiserId);
+    if (!advertiser) throw new AppError("Anunciante não encontrado", 404);
+
+    // Sem accountType/accountId: a conta do convidado ainda não existe. O
+    // vínculo que importa é com o anunciante.
+    const token = await this.tokens.issue({
+      type: TokenType.INVITE,
+      targetEmail: email,
+      advertiserId,
+    });
+
+    const link = `${config.appBaseUrl}/aceitar-convite?token=${token}`;
+
+    await this.mailer.send({
+      to: email,
+      subject: `Convite para gerenciar ${advertiser.displayName}`,
+      body:
+        `Você foi convidado a gerenciar as vagas de ${advertiser.displayName}.\n\n` +
+        `${link}\n\n` +
+        `O link vale ${config.inviteTokenTtlMs / 3_600_000} horas e só pode ` +
+        `ser usado uma vez.`,
+    });
+  }
+
+  async acceptInviteService(
+    data: AcceptInviteInput,
+  ): Promise<ResponsibleResult> {
+    const passwordHash = await this.hasher.hash(data.password);
+
+    const created = await this.tokens.consume(
+      data.token,
+      TokenType.INVITE,
+      async (token) => {
+        if (!token.advertiserId) return null;
+
+        // RN-A7 conferida AQUI também: entre o convite e o aceite, alguém
+        // pode ter cadastrado esse e-mail.
+        if (await this.emails.isTaken(token.targetEmail)) {
+          throw new AppError("E-mail já está em uso", 409);
+        }
+
+        return await this.repository.addResponsible(token.advertiserId, {
+          name: data.name,
+          email: token.targetEmail,
+          passwordHash,
+        });
+      },
+    );
+
+    if (!created) throw new AppError(INVALID_INVITE, 400);
+
+    return toResponsibleResult(created);
+  }
+
+  // RN-VG8
+  async deactivateResponsibleService(
+    advertiserId: string,
+    actorId: string,
+    targetId: string,
+  ): Promise<void> {
+    if (actorId === targetId) {
+      throw new AppError("Você não pode desativar a própria conta", 409);
+    }
+
+    const outcome = await this.repository.deactivateResponsible(
+      targetId,
+      advertiserId,
+    );
+
+    if (outcome === "not_found") {
+      throw new AppError("Responsável não encontrado", 404);
+    }
+    if (outcome === "already_inactive") {
+      throw new AppError("Responsável já está inativo", 409);
+    }
+    if (outcome === "last_active") {
+      throw new AppError(
+        "O anunciante precisa de ao menos um responsável ativo. " +
+          "Para encerrar, desative o anunciante.",
+        409,
+      );
+    }
+  }
+}
+</file>
+
+<file path="service/AdvertiserVerificationService.ts">
+// Destino no repositório: modules/advertiser/service/AdvertiserVerificationService.ts
+import { AppError } from "../../../shared/errors/AppError";
+import { ICnpjLookup } from "../../../shared/services/CnpjLookup";
+import { companyNamesMatch } from "../../../shared/utils/normalizeCompanyName";
+import { IAdvertiserRepository } from "../interfaces/IAdvertiserRepository";
+import { AdvertiserType } from "../types/AdvertiserEnums";
+import { CnpjLookupReport } from "@/shared/types/VerificationTypes";
+
+function domainOf(email: string): string {
+  return email.slice(email.lastIndexOf("@") + 1).toLowerCase();
+}
+
+// Task 11 (verificação). Por ora só a consulta assistida; o pedido do
+// responsável (RF21) e a decisão do admin (RF30) entram neste service.
+export class AdvertiserVerificationService {
+  constructor(
+    private advertisers: IAdvertiserRepository,
+    private cnpj: ICnpjLookup,
+  ) {}
+
+  // RN-V2: a consulta pública ajuda o admin, que continua decidindo e
+  // registrando o método. Nada do que volta daqui é gravado.
+  async cnpjLookupService(advertiserId: string): Promise<CnpjLookupReport> {
+    const advertiser = await this.advertisers.findById(advertiserId);
+    if (!advertiser) throw new AppError("Anunciante não encontrado", 404);
+
+    // PF tem CPF no lugar do CNPJ, e a RN-V3 não usa esta consulta.
+    if (advertiser.type !== AdvertiserType.COMPANY) {
+      throw new AppError(
+        "A consulta de CNPJ só vale para anunciante pessoa jurídica",
+        400,
+      );
+    }
+
+    const office = await this.cnpj.lookup(advertiser.cnpj);
+    if (!office) return { found: false, document: advertiser.cnpj };
+
+    const corporateDomains = new Set(
+      office.emailDomains
+        .filter((d) => d.ownership === "CORPORATE")
+        .map((d) => d.domain.toLowerCase()),
+    );
+
+    const responsibles = (
+      await this.advertisers.listResponsibles(advertiser.id)
+    )
+      .filter((r) => r.active)
+      .map((r) => {
+        const emailDomain = domainOf(r.email);
+        return {
+          id: r.id,
+          name: r.name,
+          emailDomain,
+          matchesCorporateDomain: corporateDomains.has(emailDomain),
+        };
+      });
+
+    return {
+      found: true,
+      document: advertiser.cnpj,
+      registeredLegalName: advertiser.legalName,
+      receitaLegalName: office.legalName,
+      legalNameMatches: advertiser.legalName
+        ? companyNamesMatch(advertiser.legalName, office.legalName)
+        : false,
+      alias: office.alias,
+      status: {
+        id: office.statusId,
+        text: office.statusText,
+        isActive: office.isActive,
+      },
+      emailDomains: office.emailDomains,
+      phones: office.phones,
+      responsibles,
+      sourceUpdatedAt: office.sourceUpdatedAt,
+    };
+  }
+}
+</file>
+
+<file path="types/AdvertiserEnums.ts">
+// RF20: o anunciante pode ser pessoa jurídica (CNPJ) ou física (CPF). A
+// v4.0 abriu para PF porque o mercado local é de pequenos negócios e
+// autônomos — com limites próprios, ver RN-V3a.
+export enum AdvertiserType {
+  COMPANY = "PJ",
+  INDIVIDUAL = "PF",
+}
+
+// RN-V1: todo anunciante nasce pendente. Recusado pode pedir de novo.
+export enum VerificationStatus {
+  PENDING = "pendente",
+  VERIFIED = "verificado",
+  REJECTED = "recusado",
+}
+</file>
+
+<file path="types/AdvertiserTypes.ts">
+import { AdvertiserType, VerificationStatus } from "./AdvertiserEnums";
+
+export type AdvertiserResult = {
+  id: string;
+  type: AdvertiserType;
+  cnpj: string;
+  displayName: string;
+  legalName: string | null;
+  contactEmail: string;
+  contactPhone: string;
+  site: string | null;
+  verification: VerificationStatus;
+  active: boolean;
+};
+
+export type ResponsibleResult = {
+  id: string;
+  name: string;
+  email: string;
+  active: boolean;
+};
+</file>
+
+<file path="validators/AdvertiserValidator.ts">
+import { z } from "zod";
+import { passwordSchema } from "../../../shared/validators/passwordSchema";
+import { isValidCnpj, isValidCpf } from "../../../shared/validators/documents";
+import { AdvertiserType } from "../types/AdvertiserEnums";
+
+const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email("E-mail inválido"));
+
+const nameSchema = z
+  .string()
+  .trim()
+  .min(2, "O nome deve ter ao menos 2 caracteres")
+  .max(150, "O nome deve ter no máximo 150 caracteres");
+
+const phoneSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{10,11}$/, "Telefone deve ter 10 ou 11 dígitos, sem pontuação");
+
+// Só https: um "site" com javascript: viraria link clicável na página
+// pública da empresa.
+const siteSchema = z
+  .string()
+  .trim()
+  .max(255)
+  .refine((v) => v.startsWith("https://"), "O site deve começar com https://")
+  .nullable()
+  .default(null);
+
+const documentSchema = z
+  .string()
+  .trim()
+  .regex(/^\d+$/, "O cnpj deve conter apenas dígitos");
+
+export const registerAdvertiserSchema = z
+  .object({
+    type: z.enum(AdvertiserType, { error: "Tipo inválido" }),
+    cnpj: documentSchema,
+    displayName: nameSchema,
+    legalName: nameSchema.nullable().default(null),
+    contactEmail: emailSchema,
+    contactPhone: phoneSchema,
+    site: siteSchema,
+    firstResponsible: z
+      .object({
+        name: nameSchema,
+        email: emailSchema,
+        password: passwordSchema,
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    // O documento depende do tipo: CNPJ tem 14 dígitos, CPF tem 11, e cada
+    // um tem seu cálculo de dígito verificador.
+    const isCompany = data.type === AdvertiserType.COMPANY;
+    const valid = isCompany ? isValidCnpj(data.cnpj) : isValidCpf(data.cnpj);
+
+    if (!valid) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["document"],
+        message: isCompany ? "CNPJ inválido" : "CPF inválido",
+      });
+    }
+
+    // RF20: razão social é campo de PJ.
+    if (isCompany && !data.legalName) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["legalName"],
+        message: "Razão social é obrigatória para pessoa jurídica",
       });
     }
   });
-});
-</file>
 
-<file path="modules/auth/single-session.test.ts">
-// POR QUE EXISTE: RN19 (sessão única por conta). O AuthService já implementa
-// via `replaceActiveSession`, mas é fácil quebrar numa refatoração e ninguém
-// percebe até um token antigo continuar funcionando depois do usuário ter
-// trocado de dispositivo por segurança.
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { createTestContext, TestContext, loginAs, authHeader } from "../../utils/app";
-import { truncateAll } from "../../setup/truncate";
-import { createAdmin, DEFAULT_PASSWORD } from "../../utils/fixtures";
-
-let ctx: TestContext;
-
-beforeAll(async () => {
-  ctx = await createTestContext();
-});
-
-beforeEach(async () => {
-  await truncateAll();
-});
-
-describe("RN19 — apenas uma sessão ativa por conta", () => {
-  it.skip("invalida o token anterior quando um novo login acontece", async () => {
-    await createAdmin(ctx.dataSource, ctx.hasher, { email: "a@test.local" });
-
-    const first = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
-    const second = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
-
-    await ctx.request
-      .get("/api/v1/admin/administrators")
-      .set(authHeader(first.token))
-      .expect(401);
-
-    await ctx.request
-      .get("/api/v1/admin/administrators")
-      .set(authHeader(second.token))
-      .expect(200);
-  });
-});
-</file>
-
-<file path="modules/student/cpf-masked.test.ts">
-// POR QUE EXISTE: RN32 manda mascarar o CPF em qualquer listagem do admin.
-// Não é feature, é conformidade — um CPF completo vazando numa tela de
-// listagem pode virar problema com a LGPD. O teste confere que o CPF cru
-// não aparece nem no item nem no corpo inteiro da resposta.
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { createTestContext, TestContext, loginAs, authHeader } from "../../utils/app";
-import { truncateAll } from "../../setup/truncate";
-import { createAdmin, createStudent, DEFAULT_PASSWORD } from "../../utils/fixtures";
-
-let ctx: TestContext;
-
-beforeAll(async () => {
-  ctx = await createTestContext();
-});
-
-beforeEach(async () => {
-  await truncateAll();
-});
-
-describe("RN32 — CPF mascarado na listagem do admin", () => {
-  it.skip("nunca devolve o CPF completo", async () => {
-    await createStudent(ctx.dataSource, ctx.hasher, {
-      cpf: "39053344705",
-      email: "s1@test.local",
-    });
-    await createAdmin(ctx.dataSource, ctx.hasher, { email: "a@test.local" });
-    const { token } = await loginAs(ctx, "a@test.local", DEFAULT_PASSWORD);
-
-    const res = await ctx.request
-      .get("/api/v1/admin/students")
-      .set(authHeader(token))
-      .expect(200);
-
-    expect(res.body.data.items).toHaveLength(1);
-    expect(res.body.data.items[0].cpf).toBe("•••.533.447-••");
-    expect(JSON.stringify(res.body)).not.toContain("39053344705");
-  });
-});
-</file>
-
-<file path="setup/env.ts">
-import dotenv from "dotenv";
-import path from "node:path";
-import { ensureMigrations } from "./migrate";
-
-dotenv.config({
-  path: path.resolve(__dirname, "../../.env.test"),
-  override: true,
-});
-
-if (process.env.DB_DATABASE !== "estagia_mais_test") {
-  throw new Error(
-    `DB_DATABASE precisa ser 'estagia_mais_test' durante os testes. ` +
-      `Recebido: '${process.env.DB_DATABASE}'.`,
-  );
-}
-
-await ensureMigrations();
-</file>
-
-<file path="setup/global-setup.ts">
-import { AppDataSource } from "@/shared/database/data-source";
-
-export async function setup(): Promise<void> {
-  // Nota: As migrations serão executadas quando os testes realmente rodarem
-  // Por agora, como os testes estão com skip(), não precisamos das tabelas
-  console.log("Test environment setup...");
-}
-
-export async function teardown(): Promise<void> {
-  if (AppDataSource.isInitialized) {
-    await AppDataSource.destroy();
-  }
-}
-</file>
-
-<file path="setup/migrate.ts">
-import { AppDataSource } from "@/shared/database/data-source";
-
-// Roda uma vez por worker, antes do primeiro teste do processo.
-// Idempotente: se as tabelas já existem, runMigrations é no-op.
-export async function ensureMigrations(): Promise<void> {
-  if (!AppDataSource.isInitialized) {
-    await AppDataSource.initialize();
-  }
-  await AppDataSource.runMigrations({ transaction: "all" });
-}
-</file>
-
-<file path="setup/truncate.ts">
-import { AppDataSource } from "@/shared/database/data-source";
-
-export async function truncateAll(): Promise<void> {
-  // Apenas trunca se o banco está inicializado
-  if (!AppDataSource.isInitialized) {
-    return;
-  }
-
-  try {
-    await AppDataSource.query(`TRUNCATE TABLE
-      "sessions", "admins", "students"
-      RESTART IDENTITY CASCADE`);
-  } catch (error) {
-    // Se as tabelas não existem (ex: testes skipados), ignora
-    console.warn("Truncate failed (tables may not exist):", (error as Error).message);
-  }
-}
-</file>
-
-<file path="utils/app.ts">
-import supertest from "supertest";
-import { DataSource } from "typeorm";
-import { Application } from "express";
-import { App } from "@/App";
-import { buildContainer, Container } from "@/shared/container";
-import { AppDataSource } from "@/shared/database/data-source";
-import { FakePasswordHasher } from "./FakePasswordHasher";
-import { TestEmailSender } from "./TestEmailSender";
-
-export type TestContext = {
-  app: Application;
-  // O supertest mudou os tipos: o retorno virou TestAgent<Test>, não
-  // SuperTest<Test>. Usar ReturnType evita depender do nome do tipo.
-  request: ReturnType<typeof supertest>;
-  container: Container;
-  dataSource: DataSource;
-  hasher: FakePasswordHasher;
-  emailSender: TestEmailSender;
-};
-
-export async function createTestContext(): Promise<TestContext> {
-  const hasher = new FakePasswordHasher();
-  const emailSender = new TestEmailSender();
-
-  // Inicializa o banco de dados se ainda não estiver inicializado
-  if (!AppDataSource.isInitialized) {
-    await AppDataSource.initialize();
-  }
-
-  const container = buildContainer({
-    passwordHasher: hasher,
+// RF23: tipo e documento ficam de fora — são a identidade do anunciante e
+// a base do selo de verificação.
+export const updateAdvertiserSchema = z
+  .object({
+    displayName: nameSchema.optional(),
+    legalName: nameSchema.nullable().optional(),
+    contactEmail: emailSchema.optional(),
+    contactPhone: phoneSchema.optional(),
+    site: z
+      .string()
+      .trim()
+      .max(255)
+      .refine(
+        (v) => v.startsWith("https://"),
+        "O site deve começar com https://",
+      )
+      .nullable()
+      .optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Informe ao menos um campo",
   });
 
-  const app = new App(container);
+// RF22
+export const inviteResponsibleSchema = z
+  .object({ email: emailSchema })
+  .strict();
 
-  return {
-    app: app.app,
-    request: supertest(app.app),
-    container,
-    dataSource: AppDataSource,
-    hasher,
-    emailSender,
-  };
-}
+export const acceptInviteSchema = z
+  .object({
+    token: z
+      .string()
+      .trim()
+      .min(20, "Token inválido")
+      .max(200, "Token inválido"),
+    name: nameSchema,
+    password: passwordSchema,
+  })
+  .strict();
 
-export async function loginAs(
-  ctx: TestContext,
-  email: string,
-  password: string,
-): Promise<{ token: string; accountId: string; role: string }> {
-  const res = await ctx.request
-    .post("/api/v1/auth/login")
-    .send({ email, password })
-    .expect(200);
+export const responsibleIdParamSchema = z.object({
+  id: z.uuid("Id de responsável inválido"),
+});
 
-  return {
-    token: res.body.data.token,
-    accountId: res.body.data.accountId,
-    role: res.body.data.role,
-  };
-}
+export const advertiserIdParamSchema = z.object({
+  id: z.uuid("Id de anunciante inválido"),
+});
 
-export function authHeader(token: string): Record<string, string> {
-  return { Authorization: `Bearer ${token}` };
-}
+export type RegisterAdvertiserInput = z.infer<typeof registerAdvertiserSchema>;
+export type UpdateAdvertiserInput = z.infer<typeof updateAdvertiserSchema>;
+export type InviteResponsibleInput = z.infer<typeof inviteResponsibleSchema>;
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
 </file>
 
-<file path="utils/FakePasswordHasher.ts">
-import { createHash } from "node:crypto";
-import { IPasswordHasher } from "@/shared/services/PasswordHasher";
+<file path="advertiserRoutes.ts">
+import { Router } from "express";
+import { Container } from "../../shared/container";
+import { authorize } from "../auth/middleware/authorize";
+import { AccountRole } from "../auth/types/AccountRole";
 
-export class FakePasswordHasher implements IPasswordHasher {
-  private readonly prefix = "fake$";
+export function advertiserRoutes(container: Container): Router {
+  const router = Router();
+  const advertisers = container.advertiserController;
 
-  async hash(password: string): Promise<string> {
-    return this.prefix + createHash("sha256").update(password).digest("hex");
-  }
+  /**
+   * @swagger
+   * /api/v1/advertisers:
+   *   post:
+   *     tags: [Anunciante]
+   *     summary: Cadastrar anunciante e primeiro responsável (RF20)
+   *     description: >
+   *       Público. O anunciante nasce com verificação `pendente` (RN-V1) e,
+   *       até ser verificado, só publica a vaga gratuita (RN-V4). O
+   *       documento é validado pelo dígito verificador: CNPJ para PJ, CPF
+   *       para PF. Anunciante e responsável nascem na mesma transação.
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema: { $ref: "#/components/schemas/RegisterAdvertiser" }
+   *     responses:
+   *       201: { description: Anunciante e responsável criados }
+   *       400: { $ref: "#/components/responses/BadRequest" }
+   *       409:
+   *         description: Documento ou e-mail já cadastrado
+   *         content:
+   *           application/json:
+   *             schema: { $ref: "#/components/schemas/Error" }
+   */
+  router.post("/", advertisers.registerController.bind(advertisers));
 
-  async verify(password: string, hash: string): Promise<boolean> {
-    if (!hash.startsWith(this.prefix)) return false;
-    return (await this.hash(password)) === hash;
-  }
-}
-</file>
-
-<file path="utils/fixtures.ts">
-import { DataSource } from "typeorm";
-import { Admin } from "@/modules/admin/schema/Admin.schema";
-import { Student } from "@/modules/student/schema/Student.schema";
-import { StudentPhone } from "@/modules/student/schema/StudentPhone.schema";
-import { IPasswordHasher } from "@/shared/services/PasswordHasher";
-
-export const DEFAULT_PASSWORD = "SenhaForte123";
-
-// Sufixo para evitar colisão quando o teste cria vários usuários.
-let counter = 0;
-function nextSuffix(): string {
-  counter += 1;
-  return `${Date.now()}${counter}`;
-}
-
-export async function createAdmin(
-  ds: DataSource,
-  hasher: IPasswordHasher,
-  overrides: Partial<Admin> & { password?: string } = {},
-): Promise<Admin> {
-  const repo = ds.getRepository(Admin);
-  const passwordHash = await hasher.hash(
-    overrides.password ?? DEFAULT_PASSWORD,
+  /**
+   * @swagger
+   * /api/v1/advertisers/invites/accept:
+   *   post:
+   *     tags: [Anunciante]
+   *     summary: Aceitar convite de responsável (RF22)
+   *     description: >
+   *       Público: quem aceita ainda não tem conta. O convidado define a
+   *       própria senha. O link vale 72 h e um uso. A unicidade do e-mail
+   *       (RN-A7) é conferida de novo aqui — alguém pode tê-lo cadastrado
+   *       entre o convite e o aceite.
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema: { $ref: "#/components/schemas/AcceptInvite" }
+   *     responses:
+   *       201: { description: Responsável criado }
+   *       400: { $ref: "#/components/responses/BadRequest" }
+   *       409: { $ref: "#/components/responses/Conflict" }
+   */
+  router.post(
+    "/invites/accept",
+    advertisers.acceptInviteController.bind(advertisers),
   );
 
-  const admin = repo.create({
-    name: overrides.name ?? "Admin Teste",
-    email: overrides.email ?? `admin_${nextSuffix()}@test.local`,
-    passwordHash,
-    active: overrides.active ?? true,
-    createdById: overrides.createdById ?? null,
-  });
+  // Daqui para baixo: só responsável, e sempre sobre o PRÓPRIO anunciante.
+  // O vínculo vem da sessão, então não há como alcançar outro anunciante.
+  const me = Router();
+  me.use(container.authenticate, authorize(AccountRole.RESPONSIBLE));
 
-  return repo.save(admin);
-}
+  /**
+   * @swagger
+   * /api/v1/advertisers/me:
+   *   get:
+   *     tags: [Anunciante]
+   *     summary: Ler os dados do próprio anunciante (RF23)
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Dados do anunciante }
+   *       401: { $ref: "#/components/responses/Unauthorized" }
+   *       403: { $ref: "#/components/responses/Forbidden" }
+   */
+  me.get("/", advertisers.getOwnController.bind(advertisers));
 
-export async function createStudent(
-  ds: DataSource,
-  hasher: IPasswordHasher,
-  overrides: Partial<Student> & {
-    password?: string;
-    phoneNumbers?: string[];
-  } = {},
-): Promise<Student> {
-  const repo = ds.getRepository(Student);
-  const passwordHash = await hasher.hash(
-    overrides.password ?? DEFAULT_PASSWORD,
+  /**
+   * @swagger
+   * /api/v1/advertisers/me:
+   *   patch:
+   *     tags: [Anunciante]
+   *     summary: Editar o próprio anunciante (RF23)
+   *     description: >
+   *       Tipo e documento não podem ser alterados — são a identidade do
+   *       anunciante. **Alterar o nome de exibição ou a razão social de um
+   *       anunciante verificado o devolve para `pendente`**: o selo foi
+   *       concedido àquele nome, senão bastaria ser verificado como padaria
+   *       e virar financeira.
+   *     security: [{ bearerAuth: [] }]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema: { $ref: "#/components/schemas/UpdateAdvertiser" }
+   *     responses:
+   *       200: { description: Anunciante atualizado }
+   *       400: { $ref: "#/components/responses/BadRequest" }
+   *       401: { $ref: "#/components/responses/Unauthorized" }
+   *       403: { $ref: "#/components/responses/Forbidden" }
+   */
+  me.patch("/", advertisers.updateOwnController.bind(advertisers));
+
+  /**
+   * @swagger
+   * /api/v1/advertisers/me/responsibles:
+   *   get:
+   *     tags: [Anunciante]
+   *     summary: Listar responsáveis do próprio anunciante (RF22)
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Responsáveis do anunciante }
+   *       401: { $ref: "#/components/responses/Unauthorized" }
+   *       403: { $ref: "#/components/responses/Forbidden" }
+   */
+  me.get(
+    "/responsibles",
+    advertisers.listResponsiblesController.bind(advertisers),
   );
 
-  const student = repo.create({
-    // CPF válido pelo dígito verificador.
-    cpf: overrides.cpf ?? "39053344705",
-    name: overrides.name ?? "Estudante Teste",
-    email: overrides.email ?? `student_${nextSuffix()}@test.local`,
-    passwordHash,
-    birthDate: overrides.birthDate ?? "2000-01-01",
-    active: overrides.active ?? true,
-    termsAcceptedAt: overrides.termsAcceptedAt ?? new Date(),
-    privacyAcceptedAt: overrides.privacyAcceptedAt ?? new Date(),
-    phones: (overrides.phoneNumbers ?? ["67999999999"]).map((number) => {
-      const p = new StudentPhone();
-      p.number = number;
-      return p;
-    }),
-  });
+  /**
+   * @swagger
+   * /api/v1/advertisers/me/responsibles/invite:
+   *   post:
+   *     tags: [Anunciante]
+   *     summary: Convidar outro responsável (RF22)
+   *     description: Link de 72 h, uso único; o convidado define a senha.
+   *     security: [{ bearerAuth: [] }]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema: { $ref: "#/components/schemas/InviteResponsible" }
+   *     responses:
+   *       204: { description: Convite enviado }
+   *       400: { $ref: "#/components/responses/BadRequest" }
+   *       401: { $ref: "#/components/responses/Unauthorized" }
+   *       403: { $ref: "#/components/responses/Forbidden" }
+   *       409: { $ref: "#/components/responses/Conflict" }
+   */
+  me.post(
+    "/responsibles/invite",
+    advertisers.inviteResponsibleController.bind(advertisers),
+  );
 
-  return repo.save(student);
-}
-</file>
+  /**
+   * @swagger
+   * /api/v1/advertisers/me/responsibles/{id}/deactivate:
+   *   patch:
+   *     tags: [Anunciante]
+   *     summary: Desativar um responsável (RN-VG8)
+   *     description: >
+   *       O anunciante precisa ter sempre ao menos um responsável ativo —
+   *       para encerrar, desativa-se o anunciante. A checagem roda em
+   *       transação com lock, então duas desativações simultâneas não
+   *       deixam o anunciante sem ninguém. Também não é possível desativar
+   *       a própria conta.
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       204: { description: Responsável desativado }
+   *       401: { $ref: "#/components/responses/Unauthorized" }
+   *       403: { $ref: "#/components/responses/Forbidden" }
+   *       404: { $ref: "#/components/responses/NotFound" }
+   *       409:
+   *         description: Já inativo, é a própria conta, ou é o último ativo
+   *         content:
+   *           application/json:
+   *             schema: { $ref: "#/components/schemas/Error" }
+   */
+  me.patch(
+    "/responsibles/:id/deactivate",
+    advertisers.deactivateResponsibleController.bind(advertisers),
+  );
 
-<file path="utils/TestEmailSender.ts">
-export type SentEmail = {
-  to: string;
-  subject: string;
-  body: string;
-};
+  router.use("/me", me);
 
-export class TestEmailSender {
-  readonly sent: SentEmail[] = [];
-
-  async send(email: SentEmail): Promise<void> {
-    this.sent.push(email);
-  }
-
-  reset(): void {
-    this.sent.length = 0;
-  }
+  return router;
 }
 </file>
 

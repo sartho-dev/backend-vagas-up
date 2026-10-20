@@ -1,8 +1,17 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
-import { AdvertiserType, VerificationStatus } from "../types/AdvertiserEnums";
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from "typeorm";
+import { Admin } from "../../admin/schema/Admin.schema";
+import {
+  AdvertiserType,
+  VerificationMethod,
+  VerificationStatus,
+} from "../types/AdvertiserEnums";
 
-// RF20: quem publica vagas. NÃO faz login — quem entra no sistema são os
-// responsáveis (SRS 1.3). Por isso não há senha nem sessão aqui.
 @Entity("advertisers")
 export class Advertiser {
   @PrimaryGeneratedColumn("uuid")
@@ -14,7 +23,7 @@ export class Advertiser {
   // CNPJ (14) ou CPF (11), só dígitos. Único no banco: é o que impede a
   // mesma empresa de ter dois cadastros e burlar a vaga gratuita (RN-P1).
   @Column({ name: "document", type: "varchar", length: 14, unique: true })
-  document: string;
+  cnpj: string;
 
   @Column({ name: "display_name", type: "varchar", length: 150 })
   displayName: string;
@@ -40,9 +49,8 @@ export class Advertiser {
   })
   verification: VerificationStatus;
 
-  // Quando o pedido de verificação foi feito. Não está no modelo da v4.9,
-  // mas sem ele não dá para medir o tempo de fila — e o selo "Verificado"
-  // só vale enquanto a fila anda. Ver RF21/RF30 (task 11).
+  // Quando o pedido de verificação foi feito (RF21). Sem ele não dá para
+  // medir o tempo de fila — o selo "Verificado" só vale enquanto a fila anda.
   @Column({
     name: "verification_requested_at",
     type: "timestamptz",
@@ -50,20 +58,27 @@ export class Advertiser {
   })
   verificationRequestedAt: Date | null;
 
-  // RNF07: quem decidiu, quando e por qual método (RN-V2/V3).
+  // RNF07: quem decidiu. FK para admins. Admin não é apagado, é desativado
+  // (RF34), então ON DELETE RESTRICT — mesma regra do RNF06 para qualquer FK.
+  @ManyToOne(() => Admin, { nullable: true, onDelete: "RESTRICT" })
+  @JoinColumn({ name: "verified_by" })
+  verifiedByAdmin: Admin | null;
+
   @Column({ name: "verified_by", type: "uuid", nullable: true })
   verifiedBy: string | null;
 
   @Column({ name: "verified_at", type: "timestamptz", nullable: true })
   verifiedAt: Date | null;
 
+  // RN-V2/V3: o método registra COMO o admin verificou. Enum nativo (como
+  // `verification`) para o banco recusar valor inventado, não só o Zod.
   @Column({
     name: "verification_method",
-    type: "varchar",
-    length: 150,
+    type: "enum",
+    enum: VerificationMethod,
     nullable: true,
   })
-  verificationMethod: string | null;
+  verificationMethod: VerificationMethod | null;
 
   @Column({ name: "rejection_reason", type: "text", nullable: true })
   rejectionReason: string | null;

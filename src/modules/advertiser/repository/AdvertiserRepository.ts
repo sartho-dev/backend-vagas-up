@@ -1,10 +1,15 @@
-import { Repository } from "typeorm";
+import { IsNull, Not, Repository } from "typeorm";
 import { Advertiser } from "../schema/Advertiser.schema";
 import { Responsible } from "../schema/Responsible.schema";
 import {
   DeactivateResponsibleOutcome,
+  DecideVerificationInput,
+  DecideVerificationOutcome,
   IAdvertiserRepository,
+  ListPendingVerificationOptions,
+  ListPendingVerificationResult,
   RegisterAdvertiserData,
+  RequestVerificationOutcome,
   UpdateAdvertiserData,
 } from "../interfaces/IAdvertiserRepository";
 import { VerificationStatus } from "../types/AdvertiserEnums";
@@ -35,7 +40,7 @@ export class AdvertiserRepository implements IAdvertiserRepository {
         const advertiser = await tm.save(
           tm.create(Advertiser, {
             type: data.type,
-            document: data.document,
+            cnpj: data.cnpj,
             displayName: data.displayName,
             legalName: data.legalName,
             contactEmail: data.contactEmail,
@@ -64,8 +69,8 @@ export class AdvertiserRepository implements IAdvertiserRepository {
     return await this.repository.findOne({ where: { id } });
   }
 
-  async existsByDocument(document: string): Promise<boolean> {
-    return await this.repository.exists({ where: { document } });
+  async existsByDocument(cnpj: string): Promise<boolean> {
+    return await this.repository.exists({ where: { cnpj } });
   }
 
   async update(
@@ -86,6 +91,9 @@ export class AdvertiserRepository implements IAdvertiserRepository {
         verifiedAt: null,
         verifiedBy: null,
         verificationMethod: null,
+        rejectionReason: null,
+        // A mudança de nome É o gatilho: a re-verificação começa agora.
+        verificationRequestedAt: new Date(),
       },
     );
   }
@@ -139,5 +147,116 @@ export class AdvertiserRepository implements IAdvertiserRepository {
 
       return "deactivated";
     });
+  }
+
+  async requestVerification(id: string): Promise<RequestVerificationOutcome> {
+    return await this.repository.manager.transaction(async (tm) => {
+      // Lock porque dois responsáveis do mesmo anunciante podem clicar
+      // "solicitar" ao mesmo tempo — sem lock, os dois passariam da checagem
+      // e a fila ganharia uma entrada duplicada.
+      const current = await tm.findOne(Advertiser, {
+        where: { id },
+        lock: { mode: "pessimistic_write" },
+      });
+
+      if (!current) return "not_found";
+
+      if (current.verification === VerificationStatus.VERIFIED) {
+        return "already_verified";
+      }
+
+      if (
+        current.verification === VerificationStatus.PENDING &&
+        current.verificationRequestedAt !== null
+      ) {
+        return "already_pending";
+      }
+
+      // Recusado ou pendente sem pedido: entra (ou volta) para a fila,
+      // limpando qualquer resquício da decisão anterior.
+      await tm.update(
+        Advertiser,
+        { id },
+        {
+          verification: VerificationStatus.PENDING,
+          verificationRequestedAt: new Date(),
+          verifiedAt: null,
+          verifiedBy: null,
+          verificationMethod: null,
+          rejectionReason: null,
+        },
+      );
+
+      return "requested";
+    });
+  }
+
+  async decideVerification(
+    id: string,
+    input: DecideVerificationInput,
+  ): Promise<DecideVerificationOutcome> {
+    return await this.repository.manager.transaction(async (tm) => {
+      const current = await tm.findOne(Advertiser, {
+        where: { id },
+        lock: { mode: "pessimistic_write" },
+      });
+
+      if (!current) return "not_found";
+
+      // Segundo admin que clica perde: não sobrescreve a decisão do primeiro.
+      if (current.verification === VerificationStatus.VERIFIED) {
+        return "already_verified";
+      }
+      if (current.verification === VerificationStatus.REJECTED) {
+        return "already_rejected";
+      }
+
+      if (input.decision === "verify") {
+        await tm.update(
+          Advertiser,
+          { id },
+          {
+            verification: VerificationStatus.VERIFIED,
+            verifiedBy: input.adminId,
+            verifiedAt: new Date(),
+            verificationMethod: input.method,
+            rejectionReason: null,
+          },
+        );
+      } else {
+        await tm.update(
+          Advertiser,
+          { id },
+          {
+            verification: VerificationStatus.REJECTED,
+            verifiedBy: input.adminId,
+            verifiedAt: new Date(),
+            verificationMethod: null,
+            rejectionReason: input.reason,
+          },
+        );
+      }
+
+      return "decided";
+    });
+  }
+
+  async listPendingVerification(
+    options: ListPendingVerificationOptions,
+  ): Promise<ListPendingVerificationResult> {
+    const [items, total] = await this.repository.findAndCount({
+      // verificationRequestedAt preenchido é o que distingue "pendente que
+      // pediu verificação" de "pendente recém-cadastrado". Sem esse filtro,
+      // a fila do admin encheria com anunciantes que nem pediram nada.
+      where: {
+        verification: VerificationStatus.PENDING,
+        verificationRequestedAt: Not(IsNull()),
+      },
+      order: { verificationRequestedAt: "ASC" }, // FIFO
+      skip: (options.page - 1) * options.limit,
+      take: options.limit,
+    });
+
+    return { items, total };
   }
 }

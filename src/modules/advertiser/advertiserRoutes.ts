@@ -181,6 +181,34 @@ export function advertiserRoutes(container: Container): Router {
     advertisers.deactivateResponsibleController.bind(advertisers),
   );
 
+  /**
+   * @swagger
+   * /api/v1/advertisers/me/verification:
+   *   post:
+   *     tags: [Anunciante]
+   *     summary: Solicitar verificação do anunciante (RF21)
+   *     description: >
+   *       O responsável sinaliza que o anunciante está pronto para a fila de
+   *       verificação. Os dados que o admin precisa conferir (CNPJ, razão
+   *       social, contato, responsáveis) já estão no banco desde o cadastro —
+   *       o pedido só carimba `verificationRequestedAt` e move o anunciante
+   *       de "recusado" de volta para "pendente". Não altera `verifiedBy` nem
+   *       `verificationMethod`: esses são exclusivos da decisão do admin.
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       204: { description: Anunciante na fila de verificação }
+   *       401: { $ref: "#/components/responses/Unauthorized" }
+   *       403: { $ref: "#/components/responses/Forbidden" }
+   *       409:
+   *         description: Já verificado, ou já existe pedido em análise
+   *         content:
+   *           application/json:
+   *             schema: { $ref: "#/components/schemas/Error" }
+   */
+  me.post(
+    "/verification",
+    advertisers.requestVerificationController.bind(advertisers),
+  );
   router.use("/me", me);
 
   return router;

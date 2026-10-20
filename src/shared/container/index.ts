@@ -41,17 +41,24 @@ import { ResponsibleRepository } from "../../modules/advertiser/repository/Respo
 import { ResponsibleAuthProvider } from "../../modules/advertiser/providers/ResponsibleAuthProvider";
 import { AdvertiserService } from "../../modules/advertiser/service/AdvertiserService";
 import { AdvertiserController } from "../../modules/advertiser/controller/AdvertiserController";
+import { AdvertiserVerificationService } from "../../modules/advertiser/service/AdvertiserVerificationService";
+import { AdvertiserVerificationController } from "../../modules/advertiser/controller/AdvertiserVerificationController";
 import { EmailRegistry, IEmailLookup } from "../services/EmailRegistry";
+import { HttpCnpjLookup } from "../services/HttpCnpjLookup";
 import {
   BcryptPasswordHasher,
   IPasswordHasher,
 } from "../services/PasswordHasher";
+import { ICnpjLookup, UnavailableCnpjLookup } from "../services/CnpjLookup";
 
 export type ContainerOptions = {
   passwordHasher?: IPasswordHasher;
   // Os testes injetam o TestEmailSender; sem SMTP configurado, cai no
   // ConsoleEmailSender para a aplicação subir numa máquina nova.
   emailSender?: IEmailSender;
+  // Os testes injetam um fake aqui — bater na Receita a cada teste é lento
+  // e não determinístico.
+  cnpjLookup?: ICnpjLookup;
 };
 
 export type Container = ReturnType<typeof buildContainer>;
@@ -64,6 +71,15 @@ export function buildContainer(options: ContainerOptions = {}) {
     (config.mail.host && config.mail.user
       ? new SmtpEmailSender()
       : new ConsoleEmailSender());
+
+  const cnpjLookup =
+    options.cnpjLookup ??
+    (config.cnpjLookup.baseUrl
+      ? new HttpCnpjLookup(
+          config.cnpjLookup.baseUrl,
+          config.cnpjLookup.timeoutMs,
+        )
+      : new UnavailableCnpjLookup());
 
   const singleUseTokens = new SingleUseTokenService(
     new SingleUseTokenRepository(AppDataSource.getRepository(SingleUseToken)),
@@ -82,8 +98,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     AppDataSource.getRepository(Responsible),
   );
 
-  // RN06: one email, one account, across every kind of account. When the
-  // responsible module exists, add its repository to this map.
+  // RN06: one email, one account, across every kind of account.
   const emailRegistry = new EmailRegistry(
     new Map<AccountRole, IEmailLookup>([
       [AccountRole.STUDENT, studentRepository],
@@ -92,7 +107,6 @@ export function buildContainer(options: ContainerOptions = {}) {
     ]),
   );
 
-  // When the responsible module exists, add its provider to this array.
   const authService = new AuthService(
     [
       new StudentAuthProvider(studentRepository),
@@ -117,13 +131,23 @@ export function buildContainer(options: ContainerOptions = {}) {
   const recoveryController = new RecoveryController(recoveryService);
 
   const courseController = new CourseController(
-    new CourseService(new CourseRepository(AppDataSource.getRepository(Course))),
+    new CourseService(
+      new CourseRepository(AppDataSource.getRepository(Course)),
+    ),
   );
 
   const formationController = new FormationController(
     new FormationService(
       new FormationRepository(AppDataSource.getRepository(Formation)),
     ),
+  );
+
+  // Task 11: verificação compartilhada pelos dois atores. O service é o
+  // mesmo; quem separa responsável de admin são os controllers e as rotas.
+  const advertiserVerificationService = new AdvertiserVerificationService(
+    advertiserRepository,
+    responsibleRepository,
+    cnpjLookup,
   );
 
   const advertiserController = new AdvertiserController(
@@ -135,6 +159,12 @@ export function buildContainer(options: ContainerOptions = {}) {
       emailSender,
       responsibleRepository,
     ),
+    // Segunda dependência: RF21 (POST /me/verification).
+    advertiserVerificationService,
+  );
+
+  const advertiserVerificationController = new AdvertiserVerificationController(
+    advertiserVerificationService,
   );
 
   const authController = new AuthController(authService);
@@ -168,6 +198,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     courseController,
     formationController,
     advertiserController,
+    advertiserVerificationController,
     adminController,
     authenticate,
   };
