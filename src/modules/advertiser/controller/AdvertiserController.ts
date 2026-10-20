@@ -3,10 +3,7 @@ import { asyncHandler } from "../../../shared/middleware/asyncHandler";
 import { ApiResponse } from "../../../shared/types/ApiResponse";
 import { getAuth } from "../../auth/types/AccountRole";
 import { AdvertiserService } from "../service/AdvertiserService";
-import {
-  AdvertiserResult,
-  ResponsibleResult,
-} from "../types/AdvertiserTypes";
+import { AdvertiserResult, ResponsibleResult } from "../types/AdvertiserTypes";
 import {
   acceptInviteSchema,
   inviteResponsibleSchema,
@@ -14,9 +11,13 @@ import {
   responsibleIdParamSchema,
   updateAdvertiserSchema,
 } from "../validators/AdvertiserValidator";
+import { AdvertiserVerificationService } from "../service/AdvertiserVerificationService";
 
 export class AdvertiserController {
-  constructor(private advertisers: AdvertiserService) {}
+  constructor(
+    private advertisers: AdvertiserService,
+    private verification: AdvertiserVerificationService,
+  ) {}
 
   registerController = asyncHandler(async (req: Request, res: Response) => {
     const input = registerAdvertiserSchema.parse(req.body);
@@ -96,6 +97,14 @@ export class AdvertiserController {
 
       await this.advertisers.deactivateOwnResponsibleService(accountId, id);
 
+      res.status(204).send();
+    },
+  );
+
+  requestVerificationController = asyncHandler(
+    async (_req: Request, res: Response) => {
+      const { accountId } = getAuth(res);
+      await this.verification.requestVerificationService(accountId);
       res.status(204).send();
     },
   );

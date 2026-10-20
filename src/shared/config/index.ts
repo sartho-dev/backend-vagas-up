@@ -9,6 +9,11 @@ export const config = {
   port: Number(process.env.PORT) || 3000,
   host: "0.0.0.0",
 
+  cnpjLookup: {
+    baseUrl: process.env.CNPJ_LOOKUP_BASE_URL ?? "",
+    timeoutMs: Number(process.env.CNPJ_LOOKUP_TIMEOUT_MS ?? 5000),
+  },
+
   // RN28: todas as datas de negócio (prazos de vaga, matrícula, consentimento)
   // são interpretadas nesse fuso e gravadas em UTC (`timestamptz`).
   timezone: process.env.APP_TIMEZONE || "America/Campo_Grande",

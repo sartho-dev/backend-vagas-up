@@ -10,10 +10,7 @@ import { IAdvertiserRepository } from "../interfaces/IAdvertiserRepository";
 import { IResponsibleRepository } from "../interfaces/IResponsibleRepository";
 import { Advertiser } from "../schema/Advertiser.schema";
 import { Responsible } from "../schema/Responsible.schema";
-import {
-  AdvertiserResult,
-  ResponsibleResult,
-} from "../types/AdvertiserTypes";
+import { AdvertiserResult, ResponsibleResult } from "../types/AdvertiserTypes";
 import { VerificationStatus } from "../types/AdvertiserEnums";
 import {
   AcceptInviteInput,
@@ -25,7 +22,7 @@ function toAdvertiserResult(advertiser: Advertiser): AdvertiserResult {
   return {
     id: advertiser.id,
     type: advertiser.type,
-    document: advertiser.document,
+    cnpj: advertiser.cnpj,
     displayName: advertiser.displayName,
     legalName: advertiser.legalName,
     contactEmail: advertiser.contactEmail,
@@ -117,7 +114,7 @@ export class AdvertiserService {
   async registerService(
     data: RegisterAdvertiserInput,
   ): Promise<{ advertiser: AdvertiserResult; responsible: ResponsibleResult }> {
-    if (await this.repository.existsByDocument(data.document)) {
+    if (await this.repository.existsByDocument(data.cnpj)) {
       throw new AppError("Documento já cadastrado", 409);
     }
 
@@ -131,7 +128,7 @@ export class AdvertiserService {
 
     const { advertiser, responsible } = await this.repository.register({
       type: data.type,
-      document: data.document,
+      cnpj: data.cnpj,
       displayName: data.displayName,
       legalName: data.legalName,
       contactEmail: data.contactEmail,
