@@ -3,6 +3,7 @@ import { Container } from "../../shared/container";
 import { authorize } from "../auth/middleware/authorize";
 import { AccountRole } from "../auth/types/AccountRole";
 import { advertiserVerificationAdminRoutes } from "../advertiser/advertiseVerificationRoutes";
+import { pricingAdminRoutes } from "../pricing/pricingRoutes";
 
 export function adminRoutes(container: Container): Router {
   const router = Router();
@@ -243,6 +244,10 @@ export function adminRoutes(container: Container): Router {
   // (o dado é do anunciante, a montagem é do admin), em
   // /api/v1/admin/advertisers.
   router.use("/advertisers", advertiserVerificationAdminRoutes(container));
+
+  // RF39 e CONFIGURACAO: preços das vagas e configurações do sistema.
+  // Monta em /api/v1/admin/vacancy-prices e /api/v1/admin/settings.
+  router.use("/", pricingAdminRoutes(container));
 
   return router;
   // Subtask 2 onwards: admin management, student accounts, CPF correction.

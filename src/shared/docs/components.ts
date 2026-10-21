@@ -20,6 +20,10 @@ import {
   updateFormationSchema,
 } from "../../modules/formation/validators/FormationValidator";
 import {
+  updateSettingSchema,
+  updateVacancyPriceSchema,
+} from "../../modules/pricing/validators/PricingValidator";
+import {
   createAdminSchema,
   updateOwnProfileSchema,
 } from "../../modules/admin/validators/adminValidator";
@@ -65,6 +69,10 @@ const requestSchemas = {
   InviteResponsible: inviteResponsibleSchema,
   AcceptInvite: acceptInviteSchema,
 
+  // preços e configuração
+  UpdateVacancyPrice: updateVacancyPriceSchema,
+  UpdateSetting: updateSettingSchema,
+
   // administração
   CreateAdmin: createAdminSchema,
   UpdateOwnAdminProfile: updateOwnProfileSchema,
@@ -104,22 +112,32 @@ export const errorSchema = {
 export const commonResponses = {
   BadRequest: {
     description: "Dados inválidos",
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+    content: {
+      "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+    },
   },
   Unauthorized: {
     description: "Sem token, token inválido ou sessão expirada",
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+    content: {
+      "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+    },
   },
   Forbidden: {
     description: "Token válido, mas de um perfil que não pode acessar",
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+    content: {
+      "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+    },
   },
   NotFound: {
     description: "Recurso não encontrado",
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+    content: {
+      "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+    },
   },
   Conflict: {
     description: "Conflito com o estado atual (duplicidade, regra de negócio)",
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+    content: {
+      "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+    },
   },
 };

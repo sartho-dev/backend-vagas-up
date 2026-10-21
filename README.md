@@ -162,9 +162,37 @@ O selo de verificação é o que libera vaga paga, banco de talentos e o própri
 
 > **Ainda não implementado (depende das vagas, task 13):** o limite de 3 vagas abertas para PF (RN-V3a), o bloqueio de publicação paga para não verificado (RN-V4) e a exibição do selo e o acesso ao banco de talentos (RN-V5). O estado da verificação já está gravado e consultável; falta o lado que o consome.
 
+---
+
+### Preços das vagas e configuração
+
+O anunciante paga uma vez por vaga (a primeira é grátis, RN-P1) e o preço depende do tipo. A tabela é editável pelo administrador (RF39), então mudar de preço não é deploy.
+
+| tipo | preço inicial |
+|---|---|
+| estágio | R$ 5 |
+| emprego | R$ 10 |
+| jovem aprendiz | R$ 5 |
+
+Decidido em 20/10/2026, o que resolve a pendência P7 do SRS; os R$ 20 / R$ 35 que a RN-P1 cita vêm da v4.4 e estão obsoletos.
+
+| rota | o que faz |
+|---|---|
+| `GET /api/v1/admin/vacancy-prices` | as três linhas, com quem alterou e quando |
+| `PATCH /api/v1/admin/vacancy-prices/:type` | altera um preço (RF39) |
+| `GET /api/v1/admin/settings` | todas as chaves conhecidas; não configurada vem com `value: null` |
+| `PATCH /api/v1/admin/settings/:key` | altera uma configuração; `value: null` apaga |
+
+- **A PK de `vacancy_prices` é o tipo da vaga**, não um UUID — é a única tabela assim, e é de propósito: existe uma linha por tipo, criada pela migration. Com id próprio daria para cadastrar dois preços de estágio. Por isso não há rota de criar nem de excluir.
+- **`valor` é `numeric(10,2)`.** Dinheiro em `float` acumula erro de arredondamento. Como o driver devolve `numeric` como string, a entidade converte na leitura — a API devolve `5`, não `"5.00"`.
+- **RN-P8: alterar o preço não mexe em vaga nenhuma.** A vaga guarda o valor do momento em que foi enviada para pagamento, e é esse que aparece no PIX. Quem copia é a task 13, chamando `VacancyPriceService.priceOfService`.
+- **Zero é um preço válido** (a P9 prevê lançar com R$ 0 por alguns meses).
+- **As chaves de `settings` são um enum fechado** (`advertiser_community_url`, `sponsorship_contact`): tabela chave-valor sem lista de chaves vira lixo. Cada chave valida o próprio valor — o link da comunidade exige `https://`.
+- Não há rota pública de preço: o responsável vê o valor na tela de pagamento da vaga, que lê a cópia, não a tabela.
+
 ## Documentação da API
 
-O Swagger fica em http://localhost:3001/api-docs e cobre as 24 rotas.
+O Swagger fica em http://localhost:3001/api-docs e cobre as 40 operações da API.
 
 **Os corpos de requisição são gerados dos mesmos schemas Zod que validam**, via `z.toJSONSchema` (Zod 4, alvo `openapi-3.0`), registrados em [`src/shared/docs/components.ts`](src/shared/docs/components.ts). Documentação escrita à mão mente em silêncio — alguém muda o validator, o comentário fica para trás, e o front confia no que está errado. Gerando da mesma fonte, a divergência deixa de ser possível.
 
@@ -235,7 +263,7 @@ Convenções:
 
 - **Código em inglês, mensagens de erro em português** — o usuário final é brasileiro, e a RN-A1 exige a string exata `"E-mail ou senha inválidos"`.
 - Senhas com bcrypt, custo mínimo 12 (RNF01), centralizado no `PasswordHasher`.
-- Chaves primárias UUID; CPF e CNPJ são únicos, nunca chave.
+- Chaves primárias UUID; CPF e CNPJ são únicos, nunca chave. A exceção é `vacancy_prices`, cuja PK é o tipo da vaga — veja o porquê acima.
 - Desativação lógica (`active = false`), nunca exclusão física (RNF06).
 - Datas em `timestamptz`, fuso `America/Campo_Grande`.
 

@@ -43,6 +43,13 @@ import { AdvertiserService } from "../../modules/advertiser/service/AdvertiserSe
 import { AdvertiserController } from "../../modules/advertiser/controller/AdvertiserController";
 import { AdvertiserVerificationService } from "../../modules/advertiser/service/AdvertiserVerificationService";
 import { AdvertiserVerificationController } from "../../modules/advertiser/controller/AdvertiserVerificationController";
+import { VacancyPrice } from "../../modules/pricing/schema/VacancyPrice.schema";
+import { Setting } from "../../modules/pricing/schema/Setting.schema";
+import { VacancyPriceRepository } from "../../modules/pricing/repository/VacancyPriceRepository";
+import { SettingRepository } from "../../modules/pricing/repository/SettingRepository";
+import { VacancyPriceService } from "../../modules/pricing/service/VacancyPriceService";
+import { SettingService } from "../../modules/pricing/service/SettingService";
+import { PricingController } from "../../modules/pricing/controller/PricingController";
 import { EmailRegistry, IEmailLookup } from "../services/EmailRegistry";
 import { HttpCnpjLookup } from "../services/HttpCnpjLookup";
 import {
@@ -167,6 +174,20 @@ export function buildContainer(options: ContainerOptions = {}) {
     advertiserVerificationService,
   );
 
+  // Task 12: preços (RF39) e configurações. O service de preços também é o
+  // ponto de leitura da task 13, que copia o valor na vaga ao enviá-la para
+  // pagamento (RN-P8).
+  const vacancyPriceService = new VacancyPriceService(
+    new VacancyPriceRepository(AppDataSource.getRepository(VacancyPrice)),
+  );
+  const settingService = new SettingService(
+    new SettingRepository(AppDataSource.getRepository(Setting)),
+  );
+  const pricingController = new PricingController(
+    vacancyPriceService,
+    settingService,
+  );
+
   const authController = new AuthController(authService);
   const authenticate = makeAuthenticate(authService);
 
@@ -200,6 +221,9 @@ export function buildContainer(options: ContainerOptions = {}) {
     advertiserController,
     advertiserVerificationController,
     adminController,
+    pricingController,
+    vacancyPriceService,
+    settingService,
     authenticate,
   };
 }

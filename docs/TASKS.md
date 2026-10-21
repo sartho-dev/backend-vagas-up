@@ -71,7 +71,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | S1 | Swagger gerado do Zod | — | 09 | **Fechada** |
 | 10 | Anunciante e responsável | RF20, RF22, RF23, RN-VG8 | 06, 07 | **Fechada** |
 | 11 | Verificação de anunciantes | RF21, RF30, RN-V1 a RN-V5 | 10 | **Fechada** (RN-V3a/V4/V5 → 13) |
-| 12 | Preço de vagas e configuração | RF39, RF40, RN-P8 | 02 | A fazer |
+| 12 | Preço de vagas e configuração | RF39, RF40, RN-P8 | 02 | **Fechada** (P7 resolvida) |
 | 13 | Vagas: rascunho, revisão e publicação | RF24, RF25, RF29, RN-VG1 a RN-VG9, RN-P5 | 10, 12 | A fazer |
 | 14 | Pagamento por vaga (PIX) | RF28, RF37, RN-P1 a RN-P7 | 13 | A fazer |
 | 15 | Busca e página pública da vaga | RF14, RNF04 | 13 | A fazer |
@@ -450,8 +450,26 @@ Entra o terceiro perfil. **A decisão D1 precisa estar tomada antes desta task**
 
 # TASK 12: Preço de vagas e configuração
 
+> **Status: fechada (20/10/2026).** 25 testes novos; suíte em 225. Swagger em 40 operações.
+>
+> Entregue: `vacancy_prices` com as três linhas da migration, `settings` com chaves fechadas, e a edição de ambas pelo admin com autor e data (RNF07). Módulo novo em `modules/pricing`.
+>
+> **P7 resolvida: estágio R$ 5, emprego R$ 10, jovem aprendiz R$ 5.** Decisão do dono do produto em 20/10/2026. Os R$ 20 / R$ 35 da RN-P1 (v4.4) ficam obsoletos — o SRS precisa ser corrigido na próxima versão. Como o preço é editável pela RF39, mudar de ideia não custa deploy.
+>
+> **A PK de `vacancy_prices` é o tipo, não um UUID** — única tabela do projeto assim, contra a SRS 2.3 ("toda PK é UUID"), e de propósito: existe exatamente uma linha por tipo. Com id próprio daria para cadastrar dois preços de estágio, e "quanto custa um estágio?" passaria a ter duas respostas. Por isso também não há rota de criar nem de excluir, só de atualizar: as três linhas nascem na migration.
+>
+> **`valor` é `numeric(10,2)`, não `float`** — dinheiro em ponto flutuante acumula erro de arredondamento. O driver do Postgres devolve `numeric` como string, então a entidade tem transformer para número; há teste de que a API não devolve `"5.00"`.
+>
+> **As chaves de `settings` são um enum fechado.** Uma tabela chave-valor que aceita qualquer chave acumula lixo e, em seis meses, ninguém sabe quais linhas o sistema lê. Chave nova = uma linha no enum e uma no validador. Cada chave valida o próprio valor: o link da comunidade exige `https://` (sem isso, `javascript:` entraria no link que o site mostra aos anunciantes verificados); o contato é texto livre não vazio. `value: null` apaga a chave, que volta a "não configurada" — diferente de configurada como vazia.
+>
+> **`settings.updated_by` é divergência deliberada** do modelo da v4.9, que só prevê `atualizado_em`: a RNF07 manda registrar o autor de toda decisão do administrador, e trocar o link que todos os anunciantes verificados recebem é uma delas.
+>
+> **Só metade da RN-P8 dá para fechar aqui.** O lado implementado é `priceOfService`, que a task 13 chama no envio da vaga para copiar o valor na linha da vaga — e há teste de que a alteração seguinte do preço não alcança o valor já copiado. O critério "vaga enviada antes de uma alteração mantém o valor antigo no PIX" precisa da tabela de vagas: fica para a **task 13/14**, junto com a cópia em si.
+>
+> **Sem rota pública de preço.** O responsável vê o valor na tela de pagamento (RF28), que lê a cópia guardada na vaga. Ler o preço "ao vivo" na tela seria a porta para mostrar um valor diferente do cobrado.
+
 ## Entregas
-- Tabela `vacancy_prices` (RF39): `tipo` PK (`estagio | emprego | jovem_aprendiz`), `valor`, `atualizado_por` FK, `atualizado_em`. Preços iniciais: estágio R$ 20, emprego R$ 35, jovem aprendiz a definir (**P7**).
+- Tabela `vacancy_prices` (RF39): `tipo` PK (`estagio | emprego | jovem_aprendiz`), `valor`, `atualizado_por` FK, `atualizado_em`. **Preços iniciais decididos em 20/10/2026: estágio R$ 5, emprego R$ 10, jovem aprendiz R$ 5** — isso resolve a **P7** e substitui os R$ 20 / R$ 35 da RN-P1, que vinham da v4.4.
 - Tabela `settings`: `chave` PK, `valor`, `atualizado_em` — link da comunidade de anunciantes, contato do "Anuncie aqui".
 - Edição pelo admin, com registro de quem alterou e quando.
 
