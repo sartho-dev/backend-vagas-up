@@ -33,6 +33,11 @@ import {
   registerAdvertiserSchema,
   updateAdvertiserSchema,
 } from "../../modules/advertiser/validators/AdvertiserValidator";
+import {
+  createVacancySchema,
+  patchVacancySchema,
+  submitVacancySchema,
+} from "../../modules/vacancy/validators/VacancyValidator";
 
 // Os corpos de requisição são GERADOS dos mesmos schemas Zod que validam.
 //
@@ -68,6 +73,11 @@ const requestSchemas = {
   UpdateAdvertiser: updateAdvertiserSchema,
   InviteResponsible: inviteResponsibleSchema,
   AcceptInvite: acceptInviteSchema,
+
+  // vagas
+  CreateVacancy: createVacancySchema,
+  PatchVacancy: patchVacancySchema,
+  SubmitVacancy: submitVacancySchema,
 
   // preços e configuração
   UpdateVacancyPrice: updateVacancyPriceSchema,
