@@ -3,6 +3,8 @@ import { Vacancy } from "../schema/Vacancy.schema";
 import {
   CreateVacancyData,
   IVacancyRepository,
+  ListAwaitingPaymentOptions,
+  ListAwaitingPaymentResult,
   VacancyTransition,
 } from "../interfaces/IVacancyRepository";
 import { VacancyPatch } from "../types/VacancyTypes";
@@ -62,6 +64,22 @@ export class VacancyRepository implements IVacancyRepository {
 
   async remove(id: string): Promise<void> {
     await this.repository.delete({ id });
+  }
+
+  async listAwaitingPayment(
+    options: ListAwaitingPaymentOptions,
+  ): Promise<ListAwaitingPaymentResult> {
+    const [items, total] = await this.repository.findAndCount({
+      where: { situation: VacancySituation.AWAITING_PAYMENT },
+      relations: { advertiser: true },
+      // Mais antiga primeiro: quem enviou antes espera menos. `id`
+      // desempata, então as páginas não se repetem nem pulam linha.
+      order: { updatedAt: "ASC", id: "ASC" },
+      skip: (options.page - 1) * options.limit,
+      take: options.limit,
+    });
+
+    return { items, total };
   }
 
   async countOpen(advertiserId: string): Promise<number> {

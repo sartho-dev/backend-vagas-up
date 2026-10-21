@@ -59,6 +59,13 @@ describe("Configurações do sistema", () => {
         updatedBy: null,
         updatedAt: null,
       },
+      // RF28: entrou na task 14, para a tela de pagamento da vaga.
+      {
+        key: SettingKey.PIX_KEY,
+        value: null,
+        updatedBy: null,
+        updatedAt: null,
+      },
     ]);
   });
 

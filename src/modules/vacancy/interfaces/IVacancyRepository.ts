@@ -20,6 +20,18 @@ export type VacancyTransition = {
   closedAt?: Date | null;
 };
 
+export type ListAwaitingPaymentOptions = {
+  page: number;
+  limit: number;
+};
+
+export type ListAwaitingPaymentResult = {
+  // Com o anunciante carregado: a fila do admin (RF37) mostra de quem é a
+  // vaga e se o anunciante está verificado, sem uma consulta por linha.
+  items: Vacancy[];
+  total: number;
+};
+
 export interface IVacancyRepository {
   create(data: CreateVacancyData): Promise<Vacancy>;
 
@@ -41,6 +53,12 @@ export interface IVacancyRepository {
 
   // RN-V3a: quantas vagas ABERTAS o anunciante tem agora.
   countOpen(advertiserId: string): Promise<number>;
+
+  // RF37: a fila de pagamentos. A vaga em `aguardando_pagamento` É a fila —
+  // não há linha de pagamento antes da decisão do admin (RN-P7).
+  listAwaitingPayment(
+    options: ListAwaitingPaymentOptions,
+  ): Promise<ListAwaitingPaymentResult>;
 
   // RN-P1: se o anunciante já gastou a vaga gratuita. Conta a vaga marcada
   // `free` que saiu do rascunho — um rascunho não consome nada, e a vaga

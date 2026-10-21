@@ -43,6 +43,16 @@ const settingValueSchemas: Record<SettingKey, z.ZodType<string>> = {
     .trim()
     .min(1, "Informe o contato")
     .max(255, "O contato deve ter no máximo 255 caracteres"),
+  // A chave PIX é texto livre de propósito: pode ser CPF, CNPJ, e-mail,
+  // telefone ou chave aleatória, e validar cada formato aqui só criaria uma
+  // forma de recusar uma chave válida. O que importa é não estar vazia — a
+  // tela de pagamento (RF28) mostra isto ao anunciante para ele transferir
+  // dinheiro, e espaço em branco ali seria pior que chave não configurada.
+  [SettingKey.PIX_KEY]: z
+    .string()
+    .trim()
+    .min(1, "Informe a chave PIX")
+    .max(140, "A chave PIX deve ter no máximo 140 caracteres"),
 };
 
 // `null` apaga a configuração (volta a não configurada). String vazia não é

@@ -34,6 +34,10 @@ import {
   updateAdvertiserSchema,
 } from "../../modules/advertiser/validators/AdvertiserValidator";
 import {
+  confirmPaymentSchema,
+  rejectPaymentSchema,
+} from "../../modules/payment/validators/PaymentValidator";
+import {
   createVacancySchema,
   patchVacancySchema,
   submitVacancySchema,
@@ -78,6 +82,10 @@ const requestSchemas = {
   CreateVacancy: createVacancySchema,
   PatchVacancy: patchVacancySchema,
   SubmitVacancy: submitVacancySchema,
+
+  // pagamento
+  ConfirmPayment: confirmPaymentSchema,
+  RejectPayment: rejectPaymentSchema,
 
   // preços e configuração
   UpdateVacancyPrice: updateVacancyPriceSchema,

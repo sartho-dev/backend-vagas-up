@@ -73,8 +73,9 @@ export function pricingAdminRoutes(container: Container): Router {
    *     description: >
    *       Devolve **todas** as chaves conhecidas, configuradas ou não — a
    *       não configurada vem com `value: null`. Hoje são o link da
-   *       comunidade de anunciantes (RF41) e o contato de "Anuncie aqui"
-   *       (RF40).
+   *       comunidade de anunciantes (RF41), o contato de "Anuncie aqui"
+   *       (RF40) e a chave PIX que o anunciante vê na tela de pagamento da
+   *       vaga (RF28).
    *     security: [{ bearerAuth: [] }]
    *     responses:
    *       200: { description: Configurações }
@@ -92,7 +93,9 @@ export function pricingAdminRoutes(container: Container): Router {
    *     description: >
    *       `value: null` apaga a configuração, que volta ao estado "não
    *       configurada". Cada chave tem sua regra: o link da comunidade
-   *       exige `https://`; o contato é texto livre.
+   *       exige `https://`; o contato é texto livre; a chave PIX é texto
+   *       livre não vazio, porque pode ser CPF, CNPJ, e-mail, telefone ou
+   *       chave aleatória.
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path
@@ -100,7 +103,7 @@ export function pricingAdminRoutes(container: Container): Router {
    *         required: true
    *         schema:
    *           type: string
-   *           enum: [advertiser_community_url, sponsorship_contact]
+   *           enum: [advertiser_community_url, sponsorship_contact, pix_key]
    *     requestBody:
    *       required: true
    *       content:

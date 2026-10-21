@@ -102,6 +102,16 @@ export class AdminRepository implements IAdminRepository {
     return { items, total };
   }
 
+  async listActiveEmails(): Promise<string[]> {
+    const admins = await this.repository.find({
+      where: { active: true },
+      select: { email: true },
+      order: { createdAt: "ASC" },
+    });
+
+    return admins.map((admin) => admin.email);
+  }
+
   async updateOwn(
     id: string,
     changes: { name?: string; passwordHash?: string },

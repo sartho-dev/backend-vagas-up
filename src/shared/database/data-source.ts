@@ -18,6 +18,7 @@ import { StudentPhone } from "../../modules/student/schema/StudentPhone.schema";
 import { StudentSkill } from "../../modules/student/schema/StudentSkill.schema";
 import { VacancyPrice } from "../../modules/pricing/schema/VacancyPrice.schema";
 import { Setting } from "../../modules/pricing/schema/Setting.schema";
+import { Payment } from "../../modules/payment/schema/Payment.schema";
 import { Vacancy } from "../../modules/vacancy/schema/Vacancy.schema";
 
 import { Init1790906306331 } from "./migrations/1790906306331-Init";
@@ -33,6 +34,7 @@ import { Advertisers1792415961678 } from "./migrations/1792415961678-Advertisers
 import { AdvertiserVerification1792536962495 } from "./migrations/1792536962495-AdvertiserVerification";
 import { VacancyPricesAndSettings1792548594503 } from "./migrations/1792548594503-VacancyPricesAndSettings";
 import { Vacancies1792590388776 } from "./migrations/1792590388776-Vacancies";
+import { Payments1792606603699 } from "./migrations/1792606603699-Payments";
 
 // Define a pasta base dependendo do ambiente
 const baseDir = path.join(__dirname, "../../");
@@ -52,6 +54,7 @@ export const AppDataSource = new DataSource({
     Course,
     Formation,
     Advertiser,
+    Payment,
     Responsible,
     Session,
     Setting,
@@ -82,6 +85,7 @@ export const AppDataSource = new DataSource({
     AdvertiserVerification1792536962495,
     VacancyPricesAndSettings1792548594503,
     Vacancies1792590388776,
+    Payments1792606603699,
   ],
 
   // Isso força o SSL necessário para o Google Cloud SQL
