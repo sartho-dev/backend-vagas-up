@@ -4,7 +4,7 @@ API da plataforma de vagas de estágio: estudantes se candidatam, responsáveis 
 
 Node 22 · TypeScript 5.9 · Express 5 · TypeORM · PostgreSQL 15 · Vitest
 
-O documento de requisitos está em [`docs/`](docs/), e o plano de tarefas em [`docs/TASKS.md`](docs/TASKS.md).
+O documento de requisitos (SRS v4.9) está em [`docs/EstagiaAqui_Requisitos_v4_9.md`](docs/EstagiaAqui_Requisitos_v4_9.md) — markdown convertido do PDF original, que segue na mesma pasta. O plano de tarefas está em [`docs/TASKS.md`](docs/TASKS.md), e o contrato da API em [`docs/API_CONTEXT.md`](docs/API_CONTEXT.md).
 
 ---
 
@@ -115,6 +115,8 @@ Após **5 falhas seguidas** no mesmo e-mail, o login fica bloqueado por 15 minut
 | `LOGIN_BLOCK_MS` | `900000` (15 min) | RN-A4 |
 | `RECOVERY_TOKEN_TTL_MS` | `1800000` (30 min) | RN-A6 |
 | `INVITE_TOKEN_TTL_MS` | `259200000` (72 h) | RF22 |
+| `CNPJ_LOOKUP_BASE_URL` | `https://minhareceita.org` | RN-V2 |
+| `CNPJ_LOOKUP_TIMEOUT_MS` | `5000` | RN-V2 |
 
 ### Tokens de uso único e e-mail
 
@@ -137,6 +139,28 @@ O **anunciante não faz login** — quem entra no sistema são seus **responsáv
 - Todo anunciante nasce **pendente** de verificação (RN-V1) e, até ser verificado, só publica a vaga gratuita (RN-V4).
 - **Trocar o nome de exibição ou a razão social de um anunciante verificado o devolve para pendente** (RF23): o selo foi dado àquele nome, senão bastaria ser verificado como padaria e virar financeira.
 - O anunciante precisa ter sempre ao menos um responsável ativo (RN-VG8). Para encerrar, desativa-se o anunciante.
+
+### Verificação do anunciante
+
+O selo de verificação é o que libera vaga paga, banco de talentos e o próprio selo na vaga (RN-V5). Ele é concedido **por um administrador**, nunca por automação: a consulta pública de CNPJ é apoio à decisão, não a decisão.
+
+| rota | quem | o que faz |
+|---|---|---|
+| `POST /api/v1/advertisers/me/verification` | responsável | pede a verificação; carimba a hora do pedido (RF21) |
+| `GET /api/v1/admin/advertisers/verification-queue` | admin | fila dos que **pediram**, do pedido mais antigo para o mais novo (RF30) |
+| `GET /api/v1/admin/advertisers/:id` | admin | dados do anunciante + responsáveis, para conferir o vínculo |
+| `GET /api/v1/admin/advertisers/:id/cnpj-lookup` | admin | consulta pública do CNPJ (RN-V2); só PJ |
+| `PATCH /api/v1/admin/advertisers/:id/verification` | admin | verifica (com método) ou recusa (com motivo) |
+
+- **Pendente sem pedido não entra na fila.** Todo anunciante nasce pendente; sem essa distinção a fila seria a lista de cadastros, não a de quem está esperando.
+- **O método tem que bater com o tipo.** PJ verifica por `cnpj_lookup_email_domain` ou `cnpj_lookup_phone_call` (RN-V2); PF, por `video_call` (RN-V3). Verificar PJ por videochamada deixaria um registro de auditoria sem sentido.
+- **Recusar exige motivo; verificar exige método.** O Zod usa união discriminada, então `{ decision: "verify", reason: ... }` é 400 — o registro nunca fica ambíguo.
+- **Nenhuma imagem de documento é guardada** (RN-V3). Ficam só `verified_by`, `verified_at` e `verification_method` (RNF07), e `rejection_reason` na recusa.
+- **A primeira decisão vence.** Dois admins decidindo ao mesmo tempo: o segundo recebe 409 e não sobrescreve.
+- **Recusado pode pedir de novo**, e o novo pedido limpa a decisão anterior. Enquanto não pedir, o admin não decide de novo (409).
+- A consulta pública depende de `CNPJ_LOOKUP_BASE_URL`. Vazia, o container usa o `UnavailableCnpjLookup`, e a rota responde `found: false` — a API sobe numa máquina sem acesso externo. Os testes injetam o `TestCnpjLookup`.
+
+> **Ainda não implementado (depende das vagas, task 13):** o limite de 3 vagas abertas para PF (RN-V3a), o bloqueio de publicação paga para não verificado (RN-V4) e a exibição do selo e o acesso ao banco de talentos (RN-V5). O estado da verificação já está gravado e consultável; falta o lado que o consome.
 
 ## Documentação da API
 

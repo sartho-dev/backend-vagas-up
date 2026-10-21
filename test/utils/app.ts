@@ -6,6 +6,7 @@ import { buildContainer, Container } from "@/shared/container";
 import { AppDataSource } from "@/shared/database/data-source";
 import { FakePasswordHasher } from "./FakePasswordHasher";
 import { TestEmailSender } from "./TestEmailSender";
+import { TestCnpjLookup } from "./TestCnpjLookup";
 
 export type TestContext = {
   app: Application;
@@ -16,11 +17,13 @@ export type TestContext = {
   dataSource: DataSource;
   hasher: FakePasswordHasher;
   emailSender: TestEmailSender;
+  cnpjLookup: TestCnpjLookup;
 };
 
 export async function createTestContext(): Promise<TestContext> {
   const hasher = new FakePasswordHasher();
   const emailSender = new TestEmailSender();
+  const cnpjLookup = new TestCnpjLookup();
 
   // Inicializa o banco de dados se ainda não estiver inicializado
   if (!AppDataSource.isInitialized) {
@@ -30,6 +33,7 @@ export async function createTestContext(): Promise<TestContext> {
   const container = buildContainer({
     passwordHasher: hasher,
     emailSender,
+    cnpjLookup,
   });
 
   const app = new App(container);
@@ -41,6 +45,7 @@ export async function createTestContext(): Promise<TestContext> {
     dataSource: AppDataSource,
     hasher,
     emailSender,
+    cnpjLookup,
   };
 }
 

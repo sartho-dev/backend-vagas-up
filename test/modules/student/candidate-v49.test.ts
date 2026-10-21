@@ -11,6 +11,7 @@ import {
 } from "../../utils/app";
 import { createStudent, DEFAULT_PASSWORD } from "../../utils/fixtures";
 import { truncateAll } from "../../setup/truncate";
+import { config } from "@/shared/config";
 import { MIN_AGE_YEARS } from "@/shared/services/CalculatorBirthDate";
 import {
   EducationLevel,
@@ -29,11 +30,23 @@ beforeEach(async () => {
 });
 
 // Data de nascimento de alguém que faz `years` anos exatamente hoje.
+// "Hoje" é o dia no fuso de negócio, não em UTC: a RN-C1 conta a idade em
+// America/Campo_Grande (UTC-4), então entre 20h e 00h o dia UTC já virou e
+// usar `toISOString()` produziria um aniversário de amanhã — o teste
+// falhava só nessas quatro horas.
 function birthDateForAge(years: number, dayOffset = 0): string {
-  const d = new Date();
-  d.setUTCFullYear(d.getUTCFullYear() - years);
-  d.setUTCDate(d.getUTCDate() + dayOffset);
-  return d.toISOString().slice(0, 10);
+  // en-CA formata como YYYY-MM-DD.
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: config.timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  const [y, m, d] = today.split("-").map(Number);
+  // Date.UTC evita que o fuso da máquina desloque o dia de novo.
+  const base = new Date(Date.UTC(y - years, m - 1, d + dayOffset));
+  return base.toISOString().slice(0, 10);
 }
 
 let seq = 0;
