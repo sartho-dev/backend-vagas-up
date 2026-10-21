@@ -70,7 +70,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 09 | Formações do candidato | RF11, RN-C2, RN-C4 | 04, 08 | **Fechada** |
 | S1 | Swagger gerado do Zod | — | 09 | **Fechada** |
 | 10 | Anunciante e responsável | RF20, RF22, RF23, RN-VG8 | 06, 07 | **Fechada** |
-| 11 | Verificação de anunciantes | RF21, RF30, RN-V1 a RN-V5 | 10 | A fazer |
+| 11 | Verificação de anunciantes | RF21, RF30, RN-V1 a RN-V5 | 10 | **Fechada** (RN-V3a/V4/V5 → 13) |
 | 12 | Preço de vagas e configuração | RF39, RF40, RN-P8 | 02 | A fazer |
 | 13 | Vagas: rascunho, revisão e publicação | RF24, RF25, RF29, RN-VG1 a RN-VG9, RN-P5 | 10, 12 | A fazer |
 | 14 | Pagamento por vaga (PIX) | RF28, RF37, RN-P1 a RN-P7 | 13 | A fazer |
@@ -412,6 +412,20 @@ Entra o terceiro perfil. **A decisão D1 precisa estar tomada antes desta task**
 ---
 
 # TASK 11: Verificação de anunciantes
+
+> **Status: fechada (20/10/2026).** 32 testes novos; suíte em 200. Swagger em 36 operações.
+>
+> Entregue: pedido de verificação pelo responsável (RF21), fila FIFO no painel do admin com detalhe e responsáveis (RF30), consulta pública de CNPJ como apoio à decisão (RN-V2) e decisão registrada com autor, data e método (RNF07) — recusa exige motivo, verificação exige método compatível com o tipo, e a primeira decisão vence (409 para a segunda).
+>
+> **Pendente sem pedido não entra na fila.** Todo anunciante nasce pendente (RN-V1), então a fila seria a lista de cadastros inteira. Foi para isso que a coluna `verification_requested_at` entrou adiantada na task 10.
+>
+> **A consulta pública não verifica nada.** O `ICnpjLookup` devolve situação cadastral, razão social e domínios de e-mail; quem compara e decide é o admin, e nada do relatório é gravado. Sem `CNPJ_LOOKUP_BASE_URL` o container cai no `UnavailableCnpjLookup` e a rota responde `found: false` — a API sobe numa máquina sem acesso externo.
+>
+> **O método tem que bater com o tipo** (PJ: CNPJ + vínculo; PF: videochamada). Sem essa checagem o registro de auditoria da RNF07 não significaria nada — "verificado por videochamada" numa PJ não prova CNPJ nenhum.
+>
+> **RN-V3a, RN-V4 e RN-V5 ficaram para a task 13**, e com elas dois dos quatro critérios de aceitação originais (as 3 vagas da PF e o bloqueio da 2ª vaga do não verificado). Elas são regras de **publicação de vaga**, não de verificação: sem a tabela de vagas não há o que limitar. O estado da verificação já está gravado e consultável — falta só o lado que o consome. O mesmo vale para o selo e o banco de talentos (task 18).
+>
+> **Campo `document` de volta ao nome do SRS.** A renomeação para `cnpj` quebrava o cadastro (RF20) e, pior, chamava de CNPJ o CPF da PF. A coluna no banco sempre foi `document`; agora a propriedade e o payload também.
 
 ## Entregas
 - `POST /api/v1/advertisers/me/verification` (RF21): o responsável envia os dados.

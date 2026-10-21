@@ -40,7 +40,7 @@ export class AdvertiserRepository implements IAdvertiserRepository {
         const advertiser = await tm.save(
           tm.create(Advertiser, {
             type: data.type,
-            cnpj: data.cnpj,
+            document: data.document,
             displayName: data.displayName,
             legalName: data.legalName,
             contactEmail: data.contactEmail,
@@ -69,8 +69,8 @@ export class AdvertiserRepository implements IAdvertiserRepository {
     return await this.repository.findOne({ where: { id } });
   }
 
-  async existsByDocument(cnpj: string): Promise<boolean> {
-    return await this.repository.exists({ where: { cnpj } });
+  async existsByDocument(document: string): Promise<boolean> {
+    return await this.repository.exists({ where: { document } });
   }
 
   async update(

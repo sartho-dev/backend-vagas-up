@@ -27,6 +27,7 @@ import { SingleUseTokens1792270518043 } from "./migrations/1792270518043-SingleU
 import { Courses1792413012797 } from "./migrations/1792413012797-Courses";
 import { Formations1792413953262 } from "./migrations/1792413953262-Formations";
 import { Advertisers1792415961678 } from "./migrations/1792415961678-Advertisers";
+import { AdvertiserVerification1792536962495 } from "./migrations/1792536962495-AdvertiserVerification";
 
 // Define a pasta base dependendo do ambiente
 const baseDir = path.join(__dirname, "../../");
@@ -70,6 +71,7 @@ export const AppDataSource = new DataSource({
     Courses1792413012797,
     Formations1792413953262,
     Advertisers1792415961678,
+    AdvertiserVerification1792536962495,
   ],
 
   // Isso força o SSL necessário para o Google Cloud SQL

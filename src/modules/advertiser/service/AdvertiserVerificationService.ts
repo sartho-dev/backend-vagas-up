@@ -35,7 +35,7 @@ function toQueueItem(a: Advertiser): VerificationQueueItem {
   return {
     id: a.id,
     type: a.type,
-    cnpj: a.cnpj,
+    document: a.document,
     displayName: a.displayName,
     legalName: a.legalName,
     contactEmail: a.contactEmail,
@@ -50,7 +50,7 @@ function toDetail(
   return {
     id: a.id,
     type: a.type,
-    cnpj: a.cnpj,
+    document: a.document,
     displayName: a.displayName,
     legalName: a.legalName,
     contactEmail: a.contactEmail,
@@ -142,8 +142,8 @@ export class AdvertiserVerificationService {
       );
     }
 
-    const office = await this.cnpj.lookup(advertiser.cnpj);
-    if (!office) return { found: false, document: advertiser.cnpj };
+    const office = await this.cnpj.lookup(advertiser.document);
+    if (!office) return { found: false, document: advertiser.document };
 
     const corporateDomains = new Set(
       office.emailDomains
@@ -167,7 +167,7 @@ export class AdvertiserVerificationService {
 
     return {
       found: true,
-      document: advertiser.cnpj,
+      document: advertiser.document,
       registeredLegalName: advertiser.legalName,
       receitaLegalName: office.legalName,
       legalNameMatches: advertiser.legalName

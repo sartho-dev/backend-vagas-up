@@ -94,6 +94,10 @@ export async function createAdvertiser(
     email?: string;
     password?: string;
     verification?: VerificationStatus;
+    // RF21: um anunciante só entra na fila depois de pedir. O teste da fila
+    // precisa dizer quando o pedido foi feito, porque a ordem é FIFO.
+    verificationRequestedAt?: Date | null;
+    contactEmail?: string;
   } = {},
 ): Promise<{ advertiser: Advertiser; responsible: Responsible }> {
   const advertiser = await ds.getRepository(Advertiser).save(
@@ -103,10 +107,11 @@ export async function createAdvertiser(
       document: overrides.document ?? "11222333000181",
       displayName: overrides.displayName ?? "Padaria Teste",
       legalName: overrides.legalName ?? "Padaria Teste LTDA",
-      contactEmail: "contato@test.local",
+      contactEmail: overrides.contactEmail ?? "contato@test.local",
       contactPhone: "67999999999",
       site: null,
       verification: overrides.verification ?? VerificationStatus.PENDING,
+      verificationRequestedAt: overrides.verificationRequestedAt ?? null,
     }),
   );
 

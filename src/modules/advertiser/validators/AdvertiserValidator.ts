@@ -33,12 +33,12 @@ const siteSchema = z
 const documentSchema = z
   .string()
   .trim()
-  .regex(/^\d+$/, "O cnpj deve conter apenas dígitos");
+  .regex(/^\d+$/, "O documento deve conter apenas dígitos");
 
 export const registerAdvertiserSchema = z
   .object({
     type: z.enum(AdvertiserType, { error: "Tipo inválido" }),
-    cnpj: documentSchema,
+    document: documentSchema,
     displayName: nameSchema,
     legalName: nameSchema.nullable().default(null),
     contactEmail: emailSchema,
@@ -57,7 +57,9 @@ export const registerAdvertiserSchema = z
     // O documento depende do tipo: CNPJ tem 14 dígitos, CPF tem 11, e cada
     // um tem seu cálculo de dígito verificador.
     const isCompany = data.type === AdvertiserType.COMPANY;
-    const valid = isCompany ? isValidCnpj(data.cnpj) : isValidCpf(data.cnpj);
+    const valid = isCompany
+      ? isValidCnpj(data.document)
+      : isValidCpf(data.document);
 
     if (!valid) {
       ctx.addIssue({
@@ -141,14 +143,18 @@ export const decideVerificationSchema = z.discriminatedUnion("decision", [
   z
     .object({
       decision: z.literal("verify"),
-      method: z.enum(VerificationMethod, { error: "Método inválido" }),
+      method: z.enum(VerificationMethod, {
+        error: "Informe um método de verificação válido",
+      }),
     })
     .strict(),
   z
     .object({
       decision: z.literal("reject"),
+      // A mensagem de ausência vem junto: sem ela o Zod responde em inglês,
+      // e a recusa sem motivo é justamente o erro que o admin mais comete.
       reason: z
-        .string()
+        .string({ error: "Motivo é obrigatório" })
         .trim()
         .min(1, "Motivo é obrigatório")
         .max(1000, "Motivo deve ter no máximo 1000 caracteres"),

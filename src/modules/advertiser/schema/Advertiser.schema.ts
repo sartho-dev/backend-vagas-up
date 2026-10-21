@@ -23,7 +23,7 @@ export class Advertiser {
   // CNPJ (14) ou CPF (11), só dígitos. Único no banco: é o que impede a
   // mesma empresa de ter dois cadastros e burlar a vaga gratuita (RN-P1).
   @Column({ name: "document", type: "varchar", length: 14, unique: true })
-  cnpj: string;
+  document: string;
 
   @Column({ name: "display_name", type: "varchar", length: 150 })
   displayName: string;

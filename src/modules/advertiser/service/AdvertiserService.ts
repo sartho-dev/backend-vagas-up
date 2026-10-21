@@ -22,7 +22,7 @@ function toAdvertiserResult(advertiser: Advertiser): AdvertiserResult {
   return {
     id: advertiser.id,
     type: advertiser.type,
-    cnpj: advertiser.cnpj,
+    document: advertiser.document,
     displayName: advertiser.displayName,
     legalName: advertiser.legalName,
     contactEmail: advertiser.contactEmail,
@@ -114,7 +114,7 @@ export class AdvertiserService {
   async registerService(
     data: RegisterAdvertiserInput,
   ): Promise<{ advertiser: AdvertiserResult; responsible: ResponsibleResult }> {
-    if (await this.repository.existsByDocument(data.cnpj)) {
+    if (await this.repository.existsByDocument(data.document)) {
       throw new AppError("Documento já cadastrado", 409);
     }
 
@@ -128,7 +128,7 @@ export class AdvertiserService {
 
     const { advertiser, responsible } = await this.repository.register({
       type: data.type,
-      cnpj: data.cnpj,
+      document: data.document,
       displayName: data.displayName,
       legalName: data.legalName,
       contactEmail: data.contactEmail,

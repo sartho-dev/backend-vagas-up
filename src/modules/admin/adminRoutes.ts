@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Container } from "../../shared/container";
 import { authorize } from "../auth/middleware/authorize";
 import { AccountRole } from "../auth/types/AccountRole";
+import { advertiserVerificationAdminRoutes } from "../advertiser/advertiseVerificationRoutes";
 
 export function adminRoutes(container: Container): Router {
   const router = Router();
@@ -237,6 +238,11 @@ export function adminRoutes(container: Container): Router {
    *             schema: { $ref: "#/components/schemas/Error" }
    */
   router.delete("/courses/:id", courses.deleteController.bind(courses));
+
+  // RF30: fila e decisão de verificação de anunciantes. Sub-router próprio
+  // (o dado é do anunciante, a montagem é do admin), em
+  // /api/v1/admin/advertisers.
+  router.use("/advertisers", advertiserVerificationAdminRoutes(container));
 
   return router;
   // Subtask 2 onwards: admin management, student accounts, CPF correction.

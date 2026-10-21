@@ -3,7 +3,7 @@ import { AdvertiserType, VerificationStatus } from "./AdvertiserEnums";
 export type AdvertiserResult = {
   id: string;
   type: AdvertiserType;
-  cnpj: string;
+  document: string;
   displayName: string;
   legalName: string | null;
   contactEmail: string;
@@ -23,7 +23,7 @@ export type ResponsibleResult = {
 export type VerificationQueueItem = {
   id: string;
   type: AdvertiserType;
-  cnpj: string;
+  document: string;
   displayName: string;
   legalName: string | null;
   contactEmail: string;
