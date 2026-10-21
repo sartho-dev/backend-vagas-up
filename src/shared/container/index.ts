@@ -50,6 +50,10 @@ import { SettingRepository } from "../../modules/pricing/repository/SettingRepos
 import { VacancyPriceService } from "../../modules/pricing/service/VacancyPriceService";
 import { SettingService } from "../../modules/pricing/service/SettingService";
 import { PricingController } from "../../modules/pricing/controller/PricingController";
+import { Vacancy } from "../../modules/vacancy/schema/Vacancy.schema";
+import { VacancyRepository } from "../../modules/vacancy/repository/VacancyRepository";
+import { VacancyService } from "../../modules/vacancy/service/VacancyService";
+import { VacancyController } from "../../modules/vacancy/controller/VacancyController";
 import { EmailRegistry, IEmailLookup } from "../services/EmailRegistry";
 import { HttpCnpjLookup } from "../services/HttpCnpjLookup";
 import {
@@ -188,6 +192,17 @@ export function buildContainer(options: ContainerOptions = {}) {
     settingService,
   );
 
+  // Task 13: as vagas. O VacancyPriceService entra aqui porque é no ENVIO
+  // da vaga que o preço é copiado (RN-P8) — a vaga não relê a tabela depois.
+  const vacancyController = new VacancyController(
+    new VacancyService(
+      new VacancyRepository(AppDataSource.getRepository(Vacancy)),
+      advertiserRepository,
+      responsibleRepository,
+      vacancyPriceService,
+    ),
+  );
+
   const authController = new AuthController(authService);
   const authenticate = makeAuthenticate(authService);
 
@@ -222,6 +237,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     advertiserVerificationController,
     adminController,
     pricingController,
+    vacancyController,
     vacancyPriceService,
     settingService,
     authenticate,

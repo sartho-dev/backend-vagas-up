@@ -13,6 +13,12 @@ import {
   AdvertiserType,
   VerificationStatus,
 } from "@/modules/advertiser/types/AdvertiserEnums";
+import { Vacancy } from "@/modules/vacancy/schema/Vacancy.schema";
+import {
+  VacancyModality,
+  VacancySituation,
+} from "@/modules/vacancy/types/VacancyEnums";
+import { VacancyType } from "@/shared/types/VacancyType";
 
 export const DEFAULT_PASSWORD = "SenhaForte123";
 
@@ -126,4 +132,65 @@ export async function createAdvertiser(
   );
 
   return { advertiser, responsible };
+}
+
+// Corpo válido de vaga para o POST, no formato que a rota recebe. Os testes
+// sobrescrevem só o campo que estão exercitando — assim a falha aponta para
+// a regra em teste e não para um campo esquecido.
+export function vacancyPayload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    type: VacancyType.INTERNSHIP,
+    title: "Estágio em desenvolvimento",
+    description:
+      "Vaga de estágio para apoiar o time de desenvolvimento no dia a dia.",
+    modality: VacancyModality.ON_SITE,
+    city: "Campo Grande",
+    workHours: 30,
+    minEducation: EducationLevel.UNDERGRADUATE_IN_PROGRESS,
+    ...overrides,
+  };
+}
+
+// Insere a vaga direto no banco, para o teste partir de uma situação que a
+// rota levaria vários passos para alcançar (uma vaga já aberta, por
+// exemplo). Quem testa o FLUXO usa as rotas, não isto.
+export async function createVacancy(
+  ds: DataSource,
+  advertiserId: string,
+  createdBy: string,
+  overrides: Partial<Vacancy> = {},
+): Promise<Vacancy> {
+  const repo = ds.getRepository(Vacancy);
+
+  const vacancy = repo.create({
+    advertiserId,
+    createdBy,
+    type: overrides.type ?? VacancyType.INTERNSHIP,
+    title: overrides.title ?? "Estágio em desenvolvimento",
+    description: overrides.description ?? "Descrição suficientemente longa.",
+    modality: overrides.modality ?? VacancyModality.ON_SITE,
+    city: overrides.city ?? "Campo Grande",
+    workHours: overrides.workHours ?? 30,
+    minEducation:
+      overrides.minEducation ?? EducationLevel.UNDERGRADUATE_IN_PROGRESS,
+    requiresAdult: overrides.requiresAdult ?? false,
+    positions: overrides.positions ?? 1,
+    courseId: overrides.courseId ?? null,
+    requirements: overrides.requirements ?? null,
+    benefits: overrides.benefits ?? null,
+    compensation: overrides.compensation ?? null,
+    schedule: overrides.schedule ?? null,
+    deadline: overrides.deadline ?? null,
+    situation: overrides.situation ?? VacancySituation.DRAFT,
+    free: overrides.free ?? false,
+    value: overrides.value ?? null,
+    referenceCode: overrides.referenceCode ?? `REF${nextSuffix().slice(-8)}`,
+    publishedAt: overrides.publishedAt ?? null,
+    expiresAt: overrides.expiresAt ?? null,
+    closedAt: overrides.closedAt ?? null,
+  });
+
+  return repo.save(vacancy);
 }

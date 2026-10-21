@@ -72,7 +72,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 10 | Anunciante e responsável | RF20, RF22, RF23, RN-VG8 | 06, 07 | **Fechada** |
 | 11 | Verificação de anunciantes | RF21, RF30, RN-V1 a RN-V5 | 10 | **Fechada** (RN-V3a/V4/V5 → 13) |
 | 12 | Preço de vagas e configuração | RF39, RF40, RN-P8 | 02 | **Fechada** (P7 resolvida) |
-| 13 | Vagas: rascunho, revisão e publicação | RF24, RF25, RF29, RN-VG1 a RN-VG9, RN-P5 | 10, 12 | A fazer |
+| 13 | Vagas: rascunho, revisão e publicação | RF24, RF25, RF29, RN-VG1 a RN-VG9, RN-P5 | 10, 12 | **Fechada** (RN-VG6/VG7 → 16 e 22) |
 | 14 | Pagamento por vaga (PIX) | RF28, RF37, RN-P1 a RN-P7 | 13 | A fazer |
 | 15 | Busca e página pública da vaga | RF14, RNF04 | 13 | A fazer |
 | 16 | Candidatura | RF15, RF16, RF17, RN-C3 a RN-C7 | 09, 13 | A fazer |
@@ -81,7 +81,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 19 | Mural público de candidatos | RF19, RN-C9, RNF04 | 04, 09 | A fazer |
 | 20 | Denúncias | RF31, RN-V6 a RN-V8 | 13 | A fazer |
 | 21 | Notificações no site e por e-mail | RF35 | 06, 16 | A fazer |
-| 22 | Rotinas diárias: validade de 60 dias | RN-VG2, RN-VG7, RN-P4 | 13, 16 | A fazer |
+| 22 | Rotinas diárias: validade de 60 dias | RN-VG2, RN-VG7, RN-P4 | 13, 16 | A fazer (RN-VG7 inteira veio da 13) |
 | 23 | Exclusão de conta por anonimização | RF18, RN-L1 a RN-L6 | 16 | **Bloqueada** (D3, P5) |
 | 24 | Central de Segurança e páginas públicas | RF36, RF40 | 12 | A fazer |
 | 25 | Patrocínios | RF38 | 12 | A fazer |
@@ -483,6 +483,34 @@ Entra o terceiro perfil. **A decisão D1 precisa estar tomada antes desta task**
 ---
 
 # TASK 13: Vagas: rascunho, revisão e publicação
+
+> **Status: fechada (21/10/2026).** 43 testes novos; suíte em 268. Swagger em 47 operações. Módulo novo em `modules/vacancy`.
+>
+> Entregue: tabela `vacancies`, o fluxo `rascunho → aguardando_pagamento → aberta → encerrada`, as sete rotas do responsável, e a cópia do preço no envio — que fecha a metade da RN-P8 que a task 12 não pôde fechar.
+>
+> **`carga_horaria` tem unidade POR TIPO, não uma só.** Decisão tomada em 21/10/2026. A RF24 diz "carga horária semanal" e o SRS prevê uma coluna, mas a RN-VG4 limita jovem aprendiz a **6 h diárias** (CLT art. 432), e o critério de aceitação do plano é literalmente "jovem aprendiz com 7 h diárias recusado". A coluna guarda o número que o anunciante digitou, na unidade que vale para o tipo dele: semanal em estágio e emprego, diária em jovem aprendiz. Converter para 30 h semanais recusaria 7 h por "35 > 30", e não por "7 > 6", que é como a lei escreve o limite. **Consequência para a task 15:** o rótulo da carga horária depende do tipo — `WORK_HOURS_UNIT` vive ao lado do limite, em `types/VacancyEnums.ts`, e as respostas da API já devolvem `workHoursUnit`.
+>
+> **RN-VG6 e RN-VG7 voltaram para as tasks 16 e 22.** Decisão de 21/10/2026: as duas dependem da tabela de candidaturas. "Vaga com candidatura não pode ser excluída" não tem o que consultar, e o cancelamento das candidaturas em andamento da RN-VG7 também não — a linha da task 22 já reivindicava a regra. Esta task não deixou gancho nenhum para elas: código que não dá para testar agora apodrece até lá. **A task 22 recebe a RN-VG7 inteira**, inclusive o encerramento das vagas abertas na desativação do anunciante.
+>
+> **`DELETE` exige "nunca publicada", e não "não está aberta".** A RN-VG6 pede apenas que a vaga não tenha candidaturas, mas a trava implementada é mais forte: só se exclui vaga com `published_at` nulo. O motivo é a **RN-P1**: o direito à vaga gratuita é decidido no envio e gravado na linha (`free`), então apagar a linha o devolve. Com a trava só na situação, bastava publicar a gratuita, encerrá-la e excluí-la para ganhar outra — **vagas gratuitas infinitas**. Há teste para isso. Uma vaga que esteve no ar também pode ter recebido candidatura, e sumiria do histórico junto.
+>
+> **O direito à vaga gratuita é gravado, não calculado na leitura.** `free` é decidido no envio. Recalculá-lo a cada leitura ("é gratuita se é a primeira do anunciante") faria excluir uma vaga antiga tornar outra gratuita retroativamente, e mudaria o valor de um PIX já emitido.
+>
+> **`codigo_referencia` nasce com a vaga, não no envio.** A RN-P3 só precisa dele no PIX, mas ele também é o número pelo qual o anunciante se refere à vaga — e assim a coluna pode ser `NOT NULL UNIQUE`, como o SRS 6 a descreve. Alfabeto base32 sem O, 0, I, 1 e U: alguém o digita à mão na descrição do PIX e outro alguém o lê à mão para conferir. Sorteado com `randomInt`, não `Math.random` — um gerador previsível deixaria adivinhar o código de outra vaga. Colisão (31^8) é tratada com nova tentativa, porque a coluna é UNIQUE.
+>
+> **A dupla confirmação da RF29 é regra do backend, não da tela.** O envio exige `confirmed: true` no corpo. Sem isso, a RF29 seria uma promessa do front, e um POST acidental publicaria a vaga.
+>
+> **Prazo revalidado no envio, contra o momento do envio.** A RN-VG3 diz "não pode ser anterior à publicação", mas numa vaga paga a publicação só acontece quando o admin confirma o PIX, dias depois — ninguém pode preencher um prazo contra uma data que ainda não existe. A referência é o envio, e isso é seguro: `expires_at = published_at + 60 dias` e `published_at >= envio`, então um prazo dentro de 60 dias do envio cai sempre dentro da validade. Validar só na criação deixaria publicar um rascunho antigo com prazo já vencido; há teste.
+>
+> **`PATCH` em vaga publicada é 409, não 403.** A rota é permitida para aquele responsável; o que não aceita a operação é o estado da vaga. `situation`, `value` e `free` ficam fora do schema de edição e o `.strict()` do Zod recusa o corpo — um PATCH não publica vaga sem pagar.
+>
+> **Vaga de outro anunciante é 404, não 403.** Mesma escolha da task 09: a posse é filtro de banco (`WHERE advertiser_id = :sessão`), então nesse escopo a vaga alheia não existe. Um 403 confirmaria que aquele id existe em algum lugar.
+>
+> **RN-V3a conferida no envio e de novo na task 14.** O limite de 3 vagas abertas da PF é checado ao enviar, mas entre o envio e a confirmação do PIX outra vaga pode abrir — a confirmação do pagamento precisa checar outra vez.
+>
+> **`suspensa` nasce no enum sem rota que leve a vaga até lá.** É a denúncia procedente da task 20. Acrescentar valor a um enum do Postgres depois custaria uma migration só para isso.
+>
+> **Pendência para a próxima versão do SRS:** a seção 6 descreve `carga_horaria` como um número só, sem dizer a unidade, e a RN-P1 ainda cita os R$ 20 / R$ 35 obsoletos da v4.4.
 
 ## Entregas
 - Tabela `vacancies`: `anunciante_id`, `criado_por`, `tipo` (`estagio | emprego | jovem_aprendiz`), `exige_maior_idade` (bool), `titulo`, `descricao`, `modalidade` (enum `presencial | remoto | hibrido`), `cidade`, `carga_horaria`, `escolaridade_minima`, `curso_id?`, `requisitos?`, `beneficios?`, `remuneracao?`, `horario?`, `prazo?` (timestamptz), `posicoes` (padrão 1), `situacao`, `gratuita` (bool), `valor`, `codigo_referencia` UK, `publicada_em?`, `expira_em?`.
