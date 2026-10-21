@@ -4,7 +4,7 @@ API da plataforma de vagas de estágio: estudantes se candidatam, responsáveis 
 
 Node 22 · TypeScript 5.9 · Express 5 · TypeORM · PostgreSQL 15 · Vitest
 
-O documento de requisitos está em [`docs/`](docs/), e o plano de tarefas em [`docs/TASKS.md`](docs/TASKS.md).
+O documento de requisitos (SRS v4.9) está em [`docs/EstagiaAqui_Requisitos_v4_9.md`](docs/EstagiaAqui_Requisitos_v4_9.md) — markdown convertido do PDF original, que segue na mesma pasta. O plano de tarefas está em [`docs/TASKS.md`](docs/TASKS.md), e o contrato da API em [`docs/API_CONTEXT.md`](docs/API_CONTEXT.md).
 
 ---
 
