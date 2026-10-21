@@ -16,6 +16,8 @@ import { StudentExperience } from "../../modules/student/schema/StudentExperienc
 import { StudentLanguage } from "../../modules/student/schema/StudentLanguage.schema";
 import { StudentPhone } from "../../modules/student/schema/StudentPhone.schema";
 import { StudentSkill } from "../../modules/student/schema/StudentSkill.schema";
+import { VacancyPrice } from "../../modules/pricing/schema/VacancyPrice.schema";
+import { Setting } from "../../modules/pricing/schema/Setting.schema";
 
 import { Init1790906306331 } from "./migrations/1790906306331-Init";
 import { Init1790966781806 } from "./migrations/1790966781806-Init";
@@ -28,6 +30,7 @@ import { Courses1792413012797 } from "./migrations/1792413012797-Courses";
 import { Formations1792413953262 } from "./migrations/1792413953262-Formations";
 import { Advertisers1792415961678 } from "./migrations/1792415961678-Advertisers";
 import { AdvertiserVerification1792536962495 } from "./migrations/1792536962495-AdvertiserVerification";
+import { VacancyPricesAndSettings1792548594503 } from "./migrations/1792548594503-VacancyPricesAndSettings";
 
 // Define a pasta base dependendo do ambiente
 const baseDir = path.join(__dirname, "../../");
@@ -49,6 +52,7 @@ export const AppDataSource = new DataSource({
     Advertiser,
     Responsible,
     Session,
+    Setting,
     SingleUseToken,
     Student,
     StudentCertification,
@@ -56,6 +60,7 @@ export const AppDataSource = new DataSource({
     StudentLanguage,
     StudentPhone,
     StudentSkill,
+    VacancyPrice,
   ],
   // Importadas estaticamente, nao por glob: sob o Vitest o TypeORM faria
   // require() nos .ts e o Node nao os parseia. A ordem e por timestamp.
@@ -72,6 +77,7 @@ export const AppDataSource = new DataSource({
     Formations1792413953262,
     Advertisers1792415961678,
     AdvertiserVerification1792536962495,
+    VacancyPricesAndSettings1792548594503,
   ],
 
   // Isso força o SSL necessário para o Google Cloud SQL
