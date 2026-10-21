@@ -57,3 +57,20 @@ export type VacancyResult = {
   closedAt: Date | null;
   createdAt: Date;
 };
+
+// RF28: o que a tela de pagamento mostra ao responsável. Tudo o que ele
+// precisa para fazer o PIX e nada mais.
+export type VacancyPaymentInfo = {
+  vacancyId: string;
+  title: string;
+  value: number;
+  // RN-P3: vai na DESCRIÇÃO do PIX. Sem ele o admin não acha o pagamento
+  // no extrato, e a vaga fica parada na fila.
+  referenceCode: string;
+  // Nulo quando o administrador ainda não configurou a chave (RF28). A tela
+  // avisa em vez de o envio da vaga falhar — travar a publicação por uma
+  // configuração vazia deixaria o anunciante sem saída nenhuma.
+  pixKey: string | null;
+  // RN-P4: o aviso de validade aparece na revisão E na tela de pagamento.
+  validityDays: number;
+};

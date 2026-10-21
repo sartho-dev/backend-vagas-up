@@ -3,6 +3,7 @@ import { Container } from "../../shared/container";
 import { authorize } from "../auth/middleware/authorize";
 import { AccountRole } from "../auth/types/AccountRole";
 import { advertiserVerificationAdminRoutes } from "../advertiser/advertiseVerificationRoutes";
+import { paymentAdminRoutes } from "../payment/paymentRoutes";
 import { pricingAdminRoutes } from "../pricing/pricingRoutes";
 
 export function adminRoutes(container: Container): Router {
@@ -247,6 +248,7 @@ export function adminRoutes(container: Container): Router {
 
   // RF39 e CONFIGURACAO: preços das vagas e configurações do sistema.
   // Monta em /api/v1/admin/vacancy-prices e /api/v1/admin/settings.
+  router.use("/", paymentAdminRoutes(container));
   router.use("/", pricingAdminRoutes(container));
 
   return router;

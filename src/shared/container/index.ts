@@ -50,6 +50,10 @@ import { SettingRepository } from "../../modules/pricing/repository/SettingRepos
 import { VacancyPriceService } from "../../modules/pricing/service/VacancyPriceService";
 import { SettingService } from "../../modules/pricing/service/SettingService";
 import { PricingController } from "../../modules/pricing/controller/PricingController";
+import { Payment } from "../../modules/payment/schema/Payment.schema";
+import { PaymentRepository } from "../../modules/payment/repository/PaymentRepository";
+import { PaymentService } from "../../modules/payment/service/PaymentService";
+import { PaymentController } from "../../modules/payment/controller/PaymentController";
 import { Vacancy } from "../../modules/vacancy/schema/Vacancy.schema";
 import { VacancyRepository } from "../../modules/vacancy/repository/VacancyRepository";
 import { VacancyService } from "../../modules/vacancy/service/VacancyService";
@@ -194,12 +198,34 @@ export function buildContainer(options: ContainerOptions = {}) {
 
   // Task 13: as vagas. O VacancyPriceService entra aqui porque é no ENVIO
   // da vaga que o preço é copiado (RN-P8) — a vaga não relê a tabela depois.
+  // Task 14: o pagamento por PIX. Recebe o REPOSITÓRIO de vagas, não o
+  // service: o que ele faz é mudar a situação da vaga a partir da decisão
+  // do admin, sem passar pelas regras do fluxo do anunciante.
+  const vacancyRepository = new VacancyRepository(
+    AppDataSource.getRepository(Vacancy),
+  );
+
+  const paymentService = new PaymentService(
+    new PaymentRepository(AppDataSource.getRepository(Payment)),
+    vacancyRepository,
+    advertiserRepository,
+    adminRepository,
+    emailSender,
+  );
+  const paymentController = new PaymentController(paymentService);
+
   const vacancyController = new VacancyController(
     new VacancyService(
-      new VacancyRepository(AppDataSource.getRepository(Vacancy)),
+      vacancyRepository,
       advertiserRepository,
       responsibleRepository,
       vacancyPriceService,
+      // Task 14: a tela de pagamento (RF28) lê a chave PIX da configuração.
+      settingService,
+      // RF28: o envio da vaga paga avisa os admins de que há PIX a
+      // conferir. Porta estreita (IPendingPaymentNotifier) para o módulo
+      // de vagas não depender do de pagamento.
+      paymentService,
     ),
   );
 
@@ -236,6 +262,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     advertiserController,
     advertiserVerificationController,
     adminController,
+    paymentController,
     pricingController,
     vacancyController,
     vacancyPriceService,

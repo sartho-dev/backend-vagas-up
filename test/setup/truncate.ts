@@ -5,6 +5,7 @@ import { AppDataSource } from "@/shared/database/data-source";
 // precisam ser listadas.
 const TABLES = [
   "single_use_tokens",
+  "payments",
   "vacancies",
   "sessions",
   "admins",

@@ -188,6 +188,47 @@ export function vacancyRoutes(container: Container): Router {
 
   /**
    * @swagger
+   * /api/v1/vacancies/{id}/payment:
+   *   get:
+   *     tags: [Vagas]
+   *     summary: Dados para pagar a vaga por PIX (RF28)
+   *     description: >
+   *       Valor, chave PIX, código de referência e o aviso de validade de
+   *       60 dias (RN-P4). Só para a vaga em `aguardando_pagamento` — pedir
+   *       isto de um rascunho ou de uma vaga já aberta é 409, porque não há
+   *       pagamento a fazer.
+   *
+   *       **RN-P3:** o `referenceCode` tem de ir na **descrição do PIX**.
+   *       Sem ele o administrador não acha o pagamento no extrato e a vaga
+   *       fica parada na fila.
+   *
+   *       **RN-P8:** o valor é o da linha da vaga, copiado no envio — nunca
+   *       uma leitura ao vivo da tabela de preços, que poderia mostrar ao
+   *       anunciante um valor diferente do que o admin vai conferir.
+   *
+   *       `pixKey` vem `null` enquanto o administrador não configurar a
+   *       chave; a tela avisa, em vez de o envio da vaga falhar.
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200: { description: Dados do pagamento }
+   *       401: { $ref: "#/components/responses/Unauthorized" }
+   *       403: { $ref: "#/components/responses/Forbidden" }
+   *       404: { $ref: "#/components/responses/NotFound" }
+   *       409:
+   *         description: A vaga não está aguardando pagamento
+   *         content:
+   *           application/json:
+   *             schema: { $ref: "#/components/schemas/Error" }
+   */
+  router.get("/:id/payment", vacancies.paymentInfoController);
+
+  /**
+   * @swagger
    * /api/v1/vacancies/{id}/close:
    *   post:
    *     tags: [Vagas]

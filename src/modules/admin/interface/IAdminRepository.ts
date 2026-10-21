@@ -57,6 +57,11 @@ export interface IAdminRepository {
   // RF21: stable order (oldest first), so pages never overlap or skip rows.
   list(options: ListAdminsOptions): Promise<AdminPage>;
 
+  // RF28/RF37: a quem avisar que há vaga esperando confirmação de PIX. Só
+  // os ATIVOS — admin desativado não recebe mais nada do sistema (RF34).
+  // Devolve só os e-mails: quem avisa não precisa do resto da linha.
+  listActiveEmails(): Promise<string[]>;
+
   // RF22: only the provided fields change. Returns false if the active admin
   // does not exist.
   updateOwn(

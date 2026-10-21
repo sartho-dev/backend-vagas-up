@@ -73,7 +73,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 11 | Verificação de anunciantes | RF21, RF30, RN-V1 a RN-V5 | 10 | **Fechada** (RN-V3a/V4/V5 → 13) |
 | 12 | Preço de vagas e configuração | RF39, RF40, RN-P8 | 02 | **Fechada** (P7 resolvida) |
 | 13 | Vagas: rascunho, revisão e publicação | RF24, RF25, RF29, RN-VG1 a RN-VG9, RN-P5 | 10, 12 | **Fechada** (RN-VG6/VG7 → 16 e 22) |
-| 14 | Pagamento por vaga (PIX) | RF28, RF37, RN-P1 a RN-P7 | 13 | A fazer |
+| 14 | Pagamento por vaga (PIX) | RF28, RF37, RN-P1 a RN-P7 | 13 | **Fechada** (P8 segue aberta) |
 | 15 | Busca e página pública da vaga | RF14, RNF04 | 13 | A fazer |
 | 16 | Candidatura | RF15, RF16, RF17, RN-C3 a RN-C7 | 09, 13 | A fazer |
 | 17 | Candidaturas na visão do anunciante | RF26, RN-C8, RNF07 | 16 | A fazer |
@@ -535,6 +535,38 @@ Entra o terceiro perfil. **A decisão D1 precisa estar tomada antes desta task**
 ---
 
 # TASK 14: Pagamento por vaga (PIX)
+
+> **Status: fechada (21/10/2026).** 33 testes novos; suíte em 301. Swagger em 52 operações. Módulo novo em `modules/payment`.
+>
+> Entregue: tabela `payments`, a tela de pagamento do anunciante (RF28), a fila do administrador com confirmar e recusar (RF37), pagamentos por período, e os avisos por e-mail aos admins e ao anunciante. Três dos quatro critérios de aceitação já tinham sido fechados na task 13 (primeira vaga gratuita, segunda do não verificado bloqueada, código único); o que faltava era a confirmação, que publica a vaga e registra quem confirmou.
+>
+> **A linha de pagamento nasce da DECISÃO do admin, não do envio da vaga.** A RN-P7 pede valor, data, código e autor — todos existem só depois da conferência. Antes disso, a vaga em `aguardando_pagamento` **é** a fila (RF37), e não há linha nenhuma. O caminho contrário encheria a tabela de pagamentos órfãos de toda vaga que o anunciante nunca pagou, e "quantos pagamentos tivemos?" passaria a ter duas respostas.
+>
+> **A recusa é terminal: a vaga é encerrada.** Decisão de 21/10/2026. O `vaga_id` do SRS 6 é UNIQUE — um pagamento por vaga, para sempre —, então uma vaga recusada não tem onde registrar a segunda tentativa. Em vez de largar o UK, a recusa encerra: o anunciante publica outra, que é o mesmo caminho que a RN-P5 dá para qualquer erro achado depois do envio. Custo aceito: ele redigita a vaga.
+>
+> **`recusado` e `reembolsado` se separam pelo dinheiro recebido.** Decisão de 21/10/2026, porque a RN-P6 só descreve o reembolso e o enum tem três valores. `recusado` = o PIX não conferiu (não chegou, valor errado), não há o que devolver. `reembolsado` = o PIX chegou mas a vaga não vai ao ar, e o valor volta — é o reembolso da RN-P6, que só existe antes da publicação. O campo `moneyReceived` **não tem padrão** de propósito: o admin tem de olhar o extrato e dizer, porque a resposta decide se alguém vai devolver dinheiro.
+>
+> **`decided_by` / `decided_at` em vez de `confirmado_por` / `confirmado_em`.** Divergência deliberada do SRS 6: a mesma linha registra confirmação, recusa e reembolso, e "confirmado_por" numa linha recusada leria como o contrário do que aconteceu.
+>
+> **O UK é a trava contra dois admins confirmando a mesma vaga, e a ordem das escritas importa.** O pagamento é gravado ANTES da publicação: se o INSERT falhar pelo índice único, a vaga não foi publicada. Na ordem inversa, a segunda tentativa abriria uma vaga já aberta e o dinheiro ficaria sem registro. Uma checagem com `SELECT` antes do `INSERT` não serviria — sempre há janela entre as duas.
+>
+> **A confirmação reconfere o que o envio já tinha conferido.** Entre o envio e o PIX passam dias. O anunciante tem de estar ativo e ainda **verificado** (RN-P2 — a RF23 devolve para pendente quem troca de nome, e publicar daria à vaga paga um selo que ele não tem mais), e a pessoa física não pode ter passado de 3 vagas abertas (RN-V3a). A task 13 deixou esta segunda checagem anotada justamente para cá. A fila **mostra** o anunciante que perdeu a verificação, em vez de escondê-lo: sumir da fila sem explicação é pior que aparecer bloqueado.
+>
+> **Os 60 dias contam da confirmação, não do envio.** `published_at` e `expires_at` são gravados aqui. Contar do envio daria ao anunciante menos dias de vaga quanto mais demorasse a confirmação do PIX — ele pagaria pelo tempo que o administrador levou para conferir.
+>
+> **Chave PIX em `settings`, e a tela avisa quando não está configurada.** Chave nova no enum fechado da task 12 (`pix_key`), com a regra dela no validador: texto livre não vazio, porque pode ser CPF, CNPJ, e-mail, telefone ou chave aleatória — validar formato aqui só criaria uma forma de recusar chave válida. `pixKey: null` na tela em vez de derrubar o envio: travar a publicação por uma configuração vazia deixaria o anunciante sem saída nenhuma.
+>
+> **A migration RECRIA `settings_key_enum` em vez de usar `ALTER TYPE ... ADD VALUE`.** O `ADD VALUE` não pode ser usado na mesma transação em que é criado, e as migrations rodam com `transaction: "all"`. O `down()` estreita o tipo de volta e apaga a linha `pix_key` antes — com ela no lugar, o cast falharia e a reversão travaria no meio. Verificado: reverte e roda de novo com a linha presente.
+>
+> **O aviso ao admin não derruba o envio da vaga.** A exceção do e-mail é engolida e registrada no log. A vaga já está na fila, e a fila do painel é o canal de verdade (a RF37 pede os dois); deixar a exceção subir devolveria 500 ao anunciante por uma vaga enviada com sucesso, e ele tentaria de novo achando que falhou. É o oposto da escolha do convite de responsável (task 10), onde o e-mail **é** a entrega e falhar é correto.
+>
+> **Um e-mail por administrador, sem cópia coletiva** — o endereço de um admin não é assunto dos outros. Só os ativos (RF34).
+>
+> **`confirmedTotal` é somado no banco, sobre o período inteiro.** Somar as linhas da página daria um número diferente a cada página, e esse número vira receita no fim do mês. As condições da soma são escritas à mão em vez de reaproveitar o `where` do `findAndCount`: o QueryBuilder não interpreta os operadores do TypeORM (`Between`, `MoreThanOrEqual`) e trataria o objeto como valor literal, errando a soma em silêncio.
+>
+> **Novo no `IAdminRepository`:** `listActiveEmails()`, para saber a quem avisar.
+>
+> **P8 segue aberta** (direito de arrependimento do CDC). Nada nesta task depende dela: o reembolso implementado é só o da RN-P6, por recusa do administrador antes da publicação. Se o CDC obrigar arrependimento depois da publicação, entra uma situação nova no enum de pagamento e uma regra sobre vaga já aberta — não muda o que está feito.
 
 ## Entregas
 - Tabela `payments` (RF28): `vaga_id` FK UK, `valor`, `codigo_referencia`, `situacao` (`confirmado | recusado | reembolsado`), `confirmado_por` FK, `confirmado_em`, `observacao?`.

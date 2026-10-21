@@ -3,7 +3,7 @@ import { asyncHandler } from "../../../shared/middleware/asyncHandler";
 import { ApiResponse } from "../../../shared/types/ApiResponse";
 import { getAuth } from "../../auth/types/AccountRole";
 import { VacancyService } from "../service/VacancyService";
-import { VacancyResult } from "../types/VacancyTypes";
+import { VacancyPaymentInfo, VacancyResult } from "../types/VacancyTypes";
 import {
   createVacancySchema,
   patchVacancySchema,
@@ -66,6 +66,20 @@ export class VacancyController {
     const data = await this.vacancies.submitOwnService(accountId, id);
 
     const response: ApiResponse<VacancyResult> = { status: "success", data };
+    res.status(200).json(response);
+  });
+
+  // RF28: o que o responsável precisa para fazer o PIX.
+  paymentInfoController = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = vacancyIdParamSchema.parse(req.params);
+    const { accountId } = getAuth(res);
+
+    const data = await this.vacancies.paymentInfoService(accountId, id);
+
+    const response: ApiResponse<VacancyPaymentInfo> = {
+      status: "success",
+      data,
+    };
     res.status(200).json(response);
   });
 

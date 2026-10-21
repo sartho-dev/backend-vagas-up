@@ -5,7 +5,10 @@ import {
   AdvertiserType,
   VerificationStatus,
 } from "../../advertiser/types/AdvertiserEnums";
+import { SettingService } from "../../pricing/service/SettingService";
+import { SettingKey } from "../../pricing/types/PricingEnums";
 import { VacancyPriceService } from "../../pricing/service/VacancyPriceService";
+import { IPendingPaymentNotifier } from "../interfaces/IPendingPaymentNotifier";
 import { IVacancyRepository } from "../interfaces/IVacancyRepository";
 import { Vacancy } from "../schema/Vacancy.schema";
 import {
@@ -15,7 +18,7 @@ import {
   VacancySituation,
   WORK_HOURS_UNIT,
 } from "../types/VacancyEnums";
-import { VacancyResult } from "../types/VacancyTypes";
+import { VacancyPaymentInfo, VacancyResult } from "../types/VacancyTypes";
 import {
   CreateVacancyInput,
   PatchVacancyInput,
@@ -77,6 +80,8 @@ export class VacancyService {
     private advertisers: IAdvertiserRepository,
     private responsibles: IResponsibleRepository,
     private prices: VacancyPriceService,
+    private settings: SettingService,
+    private paymentNotifier: IPendingPaymentNotifier,
   ) {}
 
   // A sessão identifica o RESPONSÁVEL; a vaga pertence ao anunciante dele.
@@ -276,7 +281,58 @@ export class VacancyService {
       throw new AppError("Vaga não encontrada", 404);
     }
 
+    // RF28: avisa os administradores de que há PIX a conferir. O erro é
+    // engolido de propósito: a vaga JÁ está na fila, e a fila do painel
+    // (RF37) é o canal de verdade — o e-mail só apressa. Deixar a exceção
+    // subir devolveria 500 ao anunciante por uma vaga que foi enviada com
+    // sucesso, e ele tentaria de novo achando que falhou.
+    if (updated.situation === VacancySituation.AWAITING_PAYMENT) {
+      try {
+        await this.paymentNotifier.notifyAdminsOfPendingPaymentService({
+          title: updated.title,
+          value: updated.value ?? 0,
+          referenceCode: updated.referenceCode,
+          advertiserName: advertiser.displayName,
+        });
+      } catch (error) {
+        console.error(
+          `[vacancy] falha ao avisar admins da vaga ${updated.referenceCode}:`,
+          error,
+        );
+      }
+    }
+
     return toResult(updated);
+  }
+
+  // RF28: a tela de pagamento. Só faz sentido para a vaga que está
+  // esperando PIX — pedir os dados de pagamento de um rascunho ou de uma
+  // vaga já aberta é 409, porque não há pagamento a fazer.
+  //
+  // O valor vem da LINHA DA VAGA, nunca da tabela de preços: é a cópia do
+  // momento do envio (RN-P8). Ler o preço "ao vivo" aqui mostraria ao
+  // anunciante um valor diferente do que o admin vai conferir.
+  async paymentInfoService(
+    responsibleId: string,
+    id: string,
+  ): Promise<VacancyPaymentInfo> {
+    const advertiserId = await this.advertiserOf(responsibleId);
+    const vacancy = await this.ownedOrFail(id, advertiserId);
+
+    if (vacancy.situation !== VacancySituation.AWAITING_PAYMENT) {
+      throw new AppError("Esta vaga não está aguardando pagamento", 409);
+    }
+
+    return {
+      vacancyId: vacancy.id,
+      title: vacancy.title,
+      // `value` é NOT NULL em toda vaga enviada; o `?? 0` existe só para o
+      // tipo, porque a coluna é nula enquanto a vaga é rascunho.
+      value: vacancy.value ?? 0,
+      referenceCode: vacancy.referenceCode,
+      pixKey: await this.settings.valueOfService(SettingKey.PIX_KEY),
+      validityDays: VACANCY_VALIDITY_DAYS,
+    };
   }
 
   // RF25: o anunciante encerra quando escolhe o candidato. Encerrada é
