@@ -9,6 +9,9 @@ import {
   WORK_HOURS_UNIT,
 } from "../types/VacancyEnums";
 
+// RF14 + RNF04: 20 por página, fixo.
+export const PUBLIC_SEARCH_PAGE_SIZE = 20;
+
 // `multipleOf(0.5)`: meia hora existe numa jornada, quinze minutos não.
 const workHoursSchema = z
   .number({ error: "Carga horária é obrigatória" })
@@ -141,3 +144,37 @@ export function assertDeadlineWithinValidity(
 
 export type CreateVacancyInput = z.infer<typeof createVacancySchema>;
 export type PatchVacancyInput = z.infer<typeof patchVacancySchema>;
+
+// RF14: os filtros da busca pública. Todos opcionais e combináveis.
+//
+// `.strict()` fora de propósito aqui: a RF43 (task 26) vai colar
+// `?origem=instagram` nos links divulgados, e um `.strict()` faria todo
+// link compartilhado no Instagram responder 400.
+export const searchVacanciesQuerySchema = z.object({
+  type: z.enum(VacancyType).optional(),
+  modality: z.enum(VacancyModality).optional(),
+  city: z.string().trim().min(2).max(100).optional(),
+  minEducation: z.enum(EducationLevel).optional(),
+  courseId: z.uuid("Curso inválido").optional(),
+  // Texto que a pessoa digitou. O `websearch_to_tsquery` do Postgres aceita
+  // o que vier, então não há sintaxe a validar — só tamanho, para não
+  // mandar um romance ao banco.
+  keyword: z.string().trim().min(2).max(100).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  // RF14 + RNF04: 20 por página. O limite é fixo e não vem da URL: os 2 s
+  // da RNF04 foram medidos para 20, e `?limit=5000` seria o caminho mais
+  // curto para derrubar a busca.
+});
+
+export const vacancySlugParamSchema = z.object({
+  slug: z
+    .string()
+    .trim()
+    .min(3)
+    .max(180)
+    // Só o que o gerador de slug produz. Um slug com outros caracteres não
+    // existe no banco, e barrar aqui evita levar lixo até a consulta.
+    .regex(/^[a-z0-9-]+$/, "Endereço inválido"),
+});
+
+export type SearchVacanciesQuery = z.infer<typeof searchVacanciesQuerySchema>;

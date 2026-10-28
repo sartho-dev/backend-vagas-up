@@ -263,19 +263,23 @@ export class VacancyService {
 
     // RN-P3: a paga espera o PIX; a gratuita não tem o que esperar e abre
     // na hora. Quem publica a paga é a task 14, ao confirmar o pagamento.
-    const updated = free
-      ? await this.repository.transition(id, {
-          situation: VacancySituation.OPEN,
-          free: true,
-          value,
-          publishedAt: now,
-          expiresAt: expiryFrom(now),
-        })
-      : await this.repository.transition(id, {
-          situation: VacancySituation.AWAITING_PAYMENT,
-          free: false,
-          value,
-        });
+    let updated: Vacancy | null;
+
+    if (free) {
+      // A gratuita não tem PIX a esperar, então abre aqui. `publish` gera o
+      // endereço público (RF42) — o mesmo método que a confirmação do PIX
+      // usa, para os dois caminhos publicarem igual.
+      updated = await this.repository.publish(id, now, expiryFrom(now), {
+        free: true,
+        value,
+      });
+    } else {
+      updated = await this.repository.transition(id, {
+        situation: VacancySituation.AWAITING_PAYMENT,
+        free: false,
+        value,
+      });
+    }
 
     if (!updated) {
       throw new AppError("Vaga não encontrada", 404);

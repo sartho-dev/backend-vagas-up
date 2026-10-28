@@ -74,7 +74,7 @@ Ao citar requisito, use o ID do SRS (RF10, RN-C3…). Ao nomear código, use a c
 | 12 | Preço de vagas e configuração | RF39, RF40, RN-P8 | 02 | **Fechada** (P7 resolvida) |
 | 13 | Vagas: rascunho, revisão e publicação | RF24, RF25, RF29, RN-VG1 a RN-VG9, RN-P5 | 10, 12 | **Fechada** (RN-VG6/VG7 → 16 e 22) |
 | 14 | Pagamento por vaga (PIX) | RF28, RF37, RN-P1 a RN-P7 | 13 | **Fechada** (P8 segue aberta) |
-| 15 | Busca e página pública da vaga | RF14, RNF04 | 13 | A fazer |
+| 15 | Busca e página pública da vaga | RF14, RNF04 | 13 | **Fechada** (RF42 parcial → 26) |
 | 16 | Candidatura | RF15, RF16, RF17, RN-C3 a RN-C7 | 09, 13 | A fazer |
 | 17 | Candidaturas na visão do anunciante | RF26, RN-C8, RNF07 | 16 | A fazer |
 | 18 | Banco de talentos e contato | RF27, RN-C8, RN-C9 | 11, 16 | A fazer |
@@ -589,6 +589,44 @@ Entra o terceiro perfil. **A decisão D1 precisa estar tomada antes desta task**
 ---
 
 # TASK 15: Busca e página pública da vaga
+
+> **Status: fechada (28/10/2026).** 37 testes novos; suíte em 338. Swagger em 54 operações.
+>
+> Entregue: busca sem login com os seis filtros combináveis (RF14), endereço legível por vaga (RF42, a parte de endereço), página pública da vaga, selo de verificação (RN-V4/V5) e o aviso anti-golpe (RN-V6). As metatags Open Graph, o botão de compartilhar, a arte de post e a origem de acesso seguem na **task 26**, que é onde o resto da RF42 e a RF43 moram.
+>
+> **Busca por palavra-chave é full-text do Postgres, não `ILIKE`.** Decisão do dono do produto em 28/10/2026. Coluna `search_vector` **gerada** (`tsvector ... GENERATED ALWAYS AS ... STORED`) com índice GIN e dicionário `portuguese`. Gerada, e não preenchida pela aplicação, para não poder sair de sincronia com o texto da vaga. Pesos `A`/`B`/`C` — título, cidade, descrição. **Consequência aceita:** não casa pedaço de palavra. "vendedor" acha "vendedores" pelo radical, mas "vend" não acha nada; quem quiser isso precisa de `pg_trgm`, que ficou fora.
+>
+> **Com palavra-chave a ordem é por relevância; sem ela, por data.** A RF14 diz "mais recentes primeiro", e é isso que vale na listagem sem busca. Mas quem digita "vendedor" quer a vaga DE vendedor, não a mais recente que menciona vendedor de passagem — então, com `keyword`, ordena por `ts_rank` e a data desempata. É também o que faz os pesos A/B/C valerem alguma coisa: sem isso eles seriam enfeite. Há teste de que o título vence a descrição mesmo sendo a vaga mais antiga.
+>
+> **`minEducation` é casamento EXATO, e isso é uma escolha discutível.** Os outros cinco filtros da RF14 são filtros de campo (tipo, modalidade, cidade, curso), e a consistência pesou. Mas o filtro mais útil seria "vagas que aceitam a minha escolaridade" — `min_education <= a minha`, pela ordem do `EDUCATION_LEVEL_ORDER`, que a RN-C3 já usa. Hoje, candidato com médio completo que filtra por médio completo **não vê** a vaga que pede fundamental completo, para a qual ele se qualifica. **Pergunta para o dono do produto**, não defeito: se a resposta for "quero ver tudo que aceito", é uma linha na consulta.
+>
+> **O endereço nasce na publicação, e os dois caminhos passam pelo mesmo método.** `slug` é nulo até a vaga abrir: rascunho e vaga aguardando pagamento não têm página, e link que abre em 404 é pior que link nenhum. Como a publicação acontece em dois lugares — envio da vaga gratuita (task 13) e confirmação do PIX (task 14) —, a geração mora em `IVacancyRepository.publish`, não nos services. Um `transition` com mais campos deixaria os dois caminhos livres para divergir, e metade das vagas ficaria sem página. Há teste para cada caminho.
+>
+> **O sufixo do endereço é sorteado, e NÃO é o código de referência.** Seria tentador reaproveitá-lo — já é único, dispensaria o laço de colisão. Mas aquele código vai na descrição do PIX (RN-P3): é identificador de pagamento, e identificador de pagamento não entra em URL pública. Sufixo de 6 caracteres sorteados com `randomInt`, com nova tentativa na colisão do UNIQUE.
+>
+> **"Dentro do prazo" é conferido por DATA, não pela situação.** A rotina que encerra vaga vencida é diária (task 22), então entre a meia-noite e a rotina existe vaga `aberta` já vencida. Confiar na situação a deixaria visível nessa janela. A busca corta por `expires_at` e também por `deadline` (RN-VG3, opcional).
+>
+> **A página aplica EXATAMENTE os mesmos cortes da busca.** Uma vaga que saiu da busca não pode seguir acessível pelo link direto, senão o endereço vira porta dos fundos — e a vaga **suspensa por denúncia** (RN-V7), que some da busca justamente para ser julgada, continuaria no ar para quem tem o link do WhatsApp. Prazo vencido responde 404, e não a página com um aviso: sem candidatura possível (task 16), a página seria convite a se candidatar para nada. Quatro testes, um por caso escondido.
+>
+> **O corpo público é um subconjunto deliberado.** Ficam fora `value`, `free`, `referenceCode`, `createdBy`, e o documento e o contato do anunciante. Valor e gratuidade são a relação comercial com o site e não dizem nada ao candidato; o código é identificador de pagamento; e o contato fica fora porque a candidatura acontece DENTRO do site (task 16) — publicar e-mail e telefone ali entregaria os dois a qualquer raspador e tiraria do site o fluxo que ele existe para intermediar. Há teste que afirma a ausência de cada campo.
+>
+> **`limit` não vem da URL.** São sempre 20 (RF14). Os 2 s da RNF04 foram pensados para 20, e `?limit=5000` seria o caminho mais curto para derrubar a busca. O parâmetro é ignorado, não obedecido; há teste.
+>
+> **O schema da query NÃO é `.strict()`** — ao contrário de todo corpo de requisição do projeto. A RF43 (task 26) vai colar `?origem=instagram` nos links divulgados, e um `.strict()` faria todo link compartilhado no Instagram responder 400.
+>
+> **Cidade compara em minúsculas, e o índice acompanha.** A cidade é texto livre do anunciante: "Campo Grande" e "campo grande" são a mesma cidade, e o candidato não devia ter de acertar a caixa. O índice é sobre `lower("city")`, senão a comparação não o usaria e o Postgres varreria a tabela.
+>
+> **Os três índices de filtro são PARCIAIS (`WHERE situation = 'aberta'`).** A busca pública nunca olha outra situação. Índice parcial é menor, cabe em memória e não cresce com rascunho nem com vaga encerrada, que viram a maioria das linhas com o tempo.
+>
+> **`search_vector` não é mapeada na entidade** de propósito: o Postgres a calcula, e qualquer tentativa do TypeORM de escrevê-la seria erro. A busca a referencia em SQL cru, no repositório.
+>
+> **RNF04 verificado, não suposto.** Com 30 mil vagas (20 mil abertas), medido com `EXPLAIN ANALYZE`: listagem ordenada por data 0,03 ms, cidade + tipo 0,01 ms, palavra-chave 6,1 ms — nenhuma com varredura sequencial. Longe dos 2 s.
+>
+> **O aviso da RN-V6 vem no topo da resposta, uma vez.** A regra pede o aviso em toda página de vaga, e a página de resultados é uma delas; repeti-lo dentro de cada um dos 20 itens só engordaria o corpo. O texto mora em `SCAM_WARNING`, no módulo, e não no front — deixar a tela decidir se mostra faria a regra depender de quem a escreve.
+>
+> **Rotas em `/api/v1/public/vacancies`,** fora do `vacancyRoutes`: aquele router exige token de responsável em todas as suas rotas, e pendurar a busca nele a tornaria privada.
+>
+> **Nas fixtures de teste:** `createVacancy` ganhou `slug` (padrão nulo, porque o padrão dela é rascunho) e entrou um `createCourse`.
 
 ## Entregas (RF14)
 - Busca **sem login**: só vagas abertas e dentro do prazo; filtros por tipo, modalidade, cidade, escolaridade mínima, curso e palavra-chave; mais recentes primeiro; **20 por página**.

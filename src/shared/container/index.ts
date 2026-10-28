@@ -58,6 +58,8 @@ import { Vacancy } from "../../modules/vacancy/schema/Vacancy.schema";
 import { VacancyRepository } from "../../modules/vacancy/repository/VacancyRepository";
 import { VacancyService } from "../../modules/vacancy/service/VacancyService";
 import { VacancyController } from "../../modules/vacancy/controller/VacancyController";
+import { PublicVacancyService } from "../../modules/vacancy/service/PublicVacancyService";
+import { PublicVacancyController } from "../../modules/vacancy/controller/PublicVacancyController";
 import { EmailRegistry, IEmailLookup } from "../services/EmailRegistry";
 import { HttpCnpjLookup } from "../services/HttpCnpjLookup";
 import {
@@ -229,6 +231,13 @@ export function buildContainer(options: ContainerOptions = {}) {
     ),
   );
 
+  // Task 15: a busca e a página pública (RF14, RF42). Service separado do
+  // VacancyService de propósito: aquele é o fluxo do anunciante sobre as
+  // vagas dele, este não tem identidade nenhuma.
+  const publicVacancyController = new PublicVacancyController(
+    new PublicVacancyService(vacancyRepository),
+  );
+
   const authController = new AuthController(authService);
   const authenticate = makeAuthenticate(authService);
 
@@ -264,6 +273,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     adminController,
     paymentController,
     pricingController,
+    publicVacancyController,
     vacancyController,
     vacancyPriceService,
     settingService,
