@@ -171,6 +171,24 @@ export class Vacancy {
   })
   referenceCode: string;
 
+  // RF42: o endereço público e legível da vaga, como
+  // `vendedor-centro-k3m9qp`. Nulo até a publicação: rascunho e vaga
+  // aguardando pagamento não têm página, e um link que abre em 404 é pior
+  // que link nenhum. UNIQUE porque é por ele que a página é encontrada.
+  @Column({
+    name: "slug",
+    type: "varchar",
+    length: 180,
+    nullable: true,
+    unique: true,
+  })
+  slug: string | null;
+
+  // A coluna `search_vector` (tsvector GERADO, com índice GIN) existe no
+  // banco mas NÃO é mapeada aqui de propósito: o Postgres a calcula de
+  // `title`, `city` e `description`, e qualquer tentativa do TypeORM de
+  // escrevê-la seria erro. A busca a referencia em SQL cru, no repositório.
+
   @Column({ name: "published_at", type: "timestamptz", nullable: true })
   publishedAt: Date | null;
 

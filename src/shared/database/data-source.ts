@@ -35,6 +35,7 @@ import { AdvertiserVerification1792536962495 } from "./migrations/1792536962495-
 import { VacancyPricesAndSettings1792548594503 } from "./migrations/1792548594503-VacancyPricesAndSettings";
 import { Vacancies1792590388776 } from "./migrations/1792590388776-Vacancies";
 import { Payments1792606603699 } from "./migrations/1792606603699-Payments";
+import { PublicVacancySearch1793222775430 } from "./migrations/1793222775430-PublicVacancySearch";
 
 // Define a pasta base dependendo do ambiente
 const baseDir = path.join(__dirname, "../../");
@@ -86,6 +87,7 @@ export const AppDataSource = new DataSource({
     VacancyPricesAndSettings1792548594503,
     Vacancies1792590388776,
     Payments1792606603699,
+    PublicVacancySearch1793222775430,
   ],
 
   // Isso força o SSL necessário para o Google Cloud SQL

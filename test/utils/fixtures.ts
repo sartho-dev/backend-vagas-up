@@ -13,6 +13,7 @@ import {
   AdvertiserType,
   VerificationStatus,
 } from "@/modules/advertiser/types/AdvertiserEnums";
+import { Course } from "@/modules/course/schema/Course.schema";
 import { Vacancy } from "@/modules/vacancy/schema/Vacancy.schema";
 import {
   VacancyModality,
@@ -187,10 +188,27 @@ export async function createVacancy(
     free: overrides.free ?? false,
     value: overrides.value ?? null,
     referenceCode: overrides.referenceCode ?? `REF${nextSuffix().slice(-8)}`,
+    // RF42: só a vaga publicada tem endereço. O padrão é nulo porque o
+    // padrão desta fixture é rascunho; quem cria vaga aberta passa o slug.
+    slug: overrides.slug ?? null,
     publishedAt: overrides.publishedAt ?? null,
     expiresAt: overrides.expiresAt ?? null,
     closedAt: overrides.closedAt ?? null,
   });
 
   return repo.save(vacancy);
+}
+
+// Curso direto no banco. Quem testa a ROTA de cursos usa a rota; isto é
+// para quem só precisa de um curso existindo para apontar uma vaga ou uma
+// formação para ele.
+export async function createCourse(
+  ds: DataSource,
+  overrides: { name?: string } = {},
+): Promise<Course> {
+  const repo = ds.getRepository(Course);
+
+  return repo.save(
+    repo.create({ name: overrides.name ?? `Curso ${nextSuffix()}` }),
+  );
 }

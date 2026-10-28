@@ -116,11 +116,9 @@ export class PaymentService {
       throw new AppError("Esta vaga já tem um pagamento registrado", 409);
     }
 
-    await this.vacancies.transition(vacancy.id, {
-      situation: VacancySituation.OPEN,
-      publishedAt: now,
-      expiresAt: expiryFrom(now),
-    });
+    // `publish` e não `transition`: é ele que gera o endereço público da
+    // vaga (RF42), igual ao caminho da vaga gratuita.
+    await this.vacancies.publish(vacancy.id, now, expiryFrom(now));
 
     await this.notifyAdvertiserPublished(vacancy);
 

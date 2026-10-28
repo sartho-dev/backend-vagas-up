@@ -1,4 +1,7 @@
+import { EducationLevel } from "../../student/types/StudentEnums";
+import { VacancyType } from "../../../shared/types/VacancyType";
 import { Vacancy } from "../schema/Vacancy.schema";
+import { VacancyModality } from "../types/VacancyEnums";
 import { VacancyInput, VacancyPatch } from "../types/VacancyTypes";
 
 export type CreateVacancyData = VacancyInput & {
@@ -32,6 +35,29 @@ export type ListAwaitingPaymentResult = {
   total: number;
 };
 
+// RF14: os filtros da busca pública. Todos opcionais e combináveis.
+export type SearchVacanciesOptions = {
+  type?: VacancyType;
+  modality?: VacancyModality;
+  city?: string;
+  minEducation?: EducationLevel;
+  courseId?: string;
+  keyword?: string;
+  page: number;
+  limit: number;
+  // Recebido de fora em vez de lido com `new Date()` aqui: é o corte de
+  // "dentro do prazo", e um teste precisa poder escolher o instante.
+  now: Date;
+};
+
+export type SearchVacanciesResult = {
+  // Com o anunciante carregado: cada vaga mostra selo "Verificado" ou o
+  // aviso de não verificado (RN-V4, RN-V5), e uma consulta por linha
+  // estouraria os 2 s da RNF04.
+  items: Vacancy[];
+  total: number;
+};
+
 export interface IVacancyRepository {
   create(data: CreateVacancyData): Promise<Vacancy>;
 
@@ -47,12 +73,34 @@ export interface IVacancyRepository {
 
   update(id: string, patch: VacancyPatch): Promise<Vacancy | null>;
 
+  // A publicação é um método próprio, e não um `transition` com mais
+  // campos, porque é a única transição que precisa gerar o endereço público
+  // (RF42). Ela acontece em DOIS lugares — o envio da vaga gratuita (task
+  // 13) e a confirmação do PIX (task 14) —, e deixar a geração do slug aqui
+  // garante que os dois caminhos a façam igual, inclusive o laço de
+  // colisão.
+  // `extra` existe para o caminho da vaga GRATUITA, que decide `free` e
+  // `value` no mesmo instante em que publica (RN-P1). Sem ele, aquele
+  // caminho precisaria de dois UPDATE para um só evento.
+  publish(
+    id: string,
+    publishedAt: Date,
+    expiresAt: Date,
+    extra?: { free?: boolean; value?: number | null },
+  ): Promise<Vacancy | null>;
+
   transition(id: string, data: VacancyTransition): Promise<Vacancy | null>;
 
   remove(id: string): Promise<void>;
 
   // RN-V3a: quantas vagas ABERTAS o anunciante tem agora.
   countOpen(advertiserId: string): Promise<number>;
+
+  // RF14 + RNF04: a busca pública. Só vaga aberta e dentro do prazo.
+  search(options: SearchVacanciesOptions): Promise<SearchVacanciesResult>;
+
+  // RF42: a página pública é encontrada pelo endereço legível, não pelo id.
+  findPublicBySlug(slug: string, now: Date): Promise<Vacancy | null>;
 
   // RF37: a fila de pagamentos. A vaga em `aguardando_pagamento` É a fila —
   // não há linha de pagamento antes da decisão do admin (RN-P7).
